@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OneBlock 3D — Engine Demo</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0b0f1a; overflow: hidden; font: 13px/1.35 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #e8eefc; }
+  #view { position: fixed; inset: 0; }
+  #panel {
+    position: fixed; top: 12px; left: 12px; width: 258px; padding: 12px 14px 12px; border-radius: 12px;
+    background: rgba(14, 18, 32, 0.72); backdrop-filter: blur(10px); border: 1px solid rgba(160, 190, 255, 0.18);
+    box-shadow: 0 8px 30px rgba(0,0,0,.35); user-select: none; z-index: 5;
+  }
+  #panel h1 { margin: 0 0 8px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #9db8ff; }
+  #panel label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 7px 0 3px; color: #b9c6e8; }
+  #panel input[type=range] { width: 100%; accent-color: #7aa2ff; }
+  #panel select, #panel button { width: 100%; background: #1a2240; color: #e8eefc; border: 1px solid #34406d; border-radius: 7px; padding: 5px 7px; font: inherit; }
+  #panel button { cursor: pointer; margin-top: 6px; }
+  #panel button:hover { background: #243060; }
+  .row { display: flex; gap: 6px; }
+  #fps { position: fixed; top: 12px; right: 12px; padding: 7px 11px; border-radius: 9px; background: rgba(14,18,32,.72); border: 1px solid rgba(160,190,255,.18); z-index: 5; text-align: right; white-space: pre; }
+  #hint { position: fixed; bottom: 86px; left: 50%; transform: translateX(-50%); padding: 6px 12px; border-radius: 9px; background: rgba(14,18,32,.7); color: #b9c6e8; z-index: 5; pointer-events: none; transition: opacity .4s; text-align: center; }
+  #cross { position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; z-index: 4; pointer-events: none; mix-blend-mode: difference; opacity: .9; display: none; }
+  #cross::before, #cross::after { content: ""; position: absolute; background: #fff; }
+  #cross::before { left: 6px; top: 0; width: 2px; height: 14px; }
+  #cross::after { top: 6px; left: 0; height: 2px; width: 14px; }
+  #icons { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 8px 10px; background: linear-gradient(transparent, rgba(8,10,20,.82) 40%); display: flex; flex-wrap: wrap; gap: 2px; max-height: 108px; overflow-y: auto; justify-content: center; }
+  #icons img { width: 36px; height: 36px; image-rendering: pixelated; padding: 2px; border-radius: 6px; background: rgba(255,255,255,.04); }
+  #icons img:hover { background: rgba(122,162,255,.35); }
+  #icons img.sel { outline: 2px solid #7aa2ff; }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="cross"></div>
+<div id="panel">
+  <h1>OneBlock 3D · engine demo</h1>
+  <label>Time of day <span id="tlabel">0.28</span></label>
+  <input id="time" type="range" min="0" max="0.9999" step="0.001" value="0.28" />
+  <label><span>Auto-advance</span> <input id="play" type="checkbox" /></label>
+  <label>Phase ambience</label>
+  <select id="phase">
+    <option value="plains">1 · Plains</option>
+    <option value="underground">2 · Underground</option>
+    <option value="snow">3 · Snowy Peaks</option>
+    <option value="desert">4 · Sunlit Dunes</option>
+    <option value="caverns">5 · Deep Caverns</option>
+    <option value="ember">6 · Ember Wastes</option>
+    <option value="skylands">7 · The Skylands</option>
+  </select>
+  <label>Quality</label>
+  <select id="quality"><option value="high">High (shadows + bloom)</option><option value="low">Low</option></select>
+  <label>Held item (viewmodel)</label>
+  <select id="held"><option value="">(empty hand)</option></select>
+  <div class="row"><button id="swing">Swing</button><button id="hurt">Hurt flash</button></div>
+  <div class="row"><button id="uw">Underwater</button><button id="stress">+3000 blocks</button></div>
+  <div class="row"><button id="fx">Particles</button><button id="home">Reset cam</button></div>
+</div>
+<div id="fps">-- fps</div>
+<div id="hint">Click the view to fly · WASD move · Space / Shift up / down · Ctrl fast · LMB break · RMB place held block · Esc release</div>
+<div id="icons"></div>
+<script type="module" src="/src/demo.js"></script>
+</body>
+</html>
