@@ -9,6 +9,7 @@ const OCCL = new Uint8Array(NB);     // opaque full cube: hides neighbours' face
 const LAYER = new Uint8Array(NB);
 const SHAPE = new Uint8Array(NB);    // 0 cube 1 cross 2 torch 3 bed 4 farmland 5 water 6 wheat(#)
 const SAMECULL = new Uint8Array(NB); // same-id neighbour hides the face
+const LEAFLIKE = new Uint8Array(NB);  // cutout cubes (leaves): hide shared faces between neighbours
 const HEIGHT = new Float32Array(NB).fill(1);
 const WATER = BLOCK_BY_KEY.water.id;
 
@@ -19,6 +20,7 @@ for (const b of BLOCKS) {
   OCCL[b.id] = b.render === 'opaque' && sh === 'cube' ? 1 : 0;
   LAYER[b.id] = sh === 'water' ? 3 : b.render === 'translucent' ? 2 : b.render === 'cutout' ? 1 : 0;
   SAMECULL[b.id] = b.render === 'translucent' || sh === 'bed' || sh === 'farmland' ? 1 : 0;
+  if (b.render === 'cutout' && sh === 'cube') LEAFLIKE[b.id] = 1;
   if (sh === 'bed') HEIGHT[b.id] = 9 / 16;
   if (sh === 'farmland') HEIGHT[b.id] = 15 / 16;
 }
@@ -106,7 +108,7 @@ class Buf {
 function faceVisible(id, nid) {
   if (nid === 0) return true;
   if (OCCL[nid]) return false;
-  if (nid === id && SAMECULL[id]) return false;
+  if (nid === id && (SAMECULL[id] || LEAFLIKE[id])) return false;
   return true;
 }
 
@@ -126,6 +128,7 @@ export function meshChunk(world, chunk) {
     const layer = LAYER[id];
     const B = bufs[layer];
     const uvs = UV[id];
+    if (!uvs) continue; // unknown id: treat as air
     const jit = 0.965 + hash(ox + lx, oy + ly, oz + lz) * 0.07;
 
     if (shape === 1 || shape === 6) { // cross / wheat
@@ -168,7 +171,7 @@ export function meshChunk(world, chunk) {
     // ----- cube-like (cube, bed, farmland, water) -----
     const isWater = shape === 5;
     let h = HEIGHT[id];
-    if (isWater && pad[pidx(px, py + 1, pz)] !== WATER) h = 14 / 16;
+    if (isWater) { const above = pad[pidx(px, py + 1, pz)]; if (above !== WATER && !OCCL[above]) h = 14 / 16; }
     const useAO = layer < 2;
     for (let f = 0; f < 6; f++) {
       const n = FACE_N[f];
@@ -185,7 +188,7 @@ export function meshChunk(world, chunk) {
           const a = OCCL[pad[pidx(px + s1[0], py + s1[1], pz + s1[2])]];
           const b = OCCL[pad[pidx(px + s2[0], py + s2[1], pz + s2[2])]];
           const c = OCCL[pad[pidx(px + cr[0], py + cr[1], pz + cr[2])]];
-          aoV[i] = AO_BRIGHT[a && b ? 0 : 3 - (a + b + c)] * jit;
+          aoV[i] = AO_BRIGHT[a && b ? 0 : 3 - (a + b + c)] * jit * (f === 3 ? 1 : f === 2 ? 1 : 1.05);
         }
       } else aoV[0] = aoV[1] = aoV[2] = aoV[3] = 1;
       for (let i = 0; i < 4; i++) {

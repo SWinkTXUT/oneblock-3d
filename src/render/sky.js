@@ -4,21 +4,23 @@ import { mulberry32, hash, vnoise } from './pixel.js';
 
 const C = (h) => new THREE.Color(h);
 const KF = [
-  { t: 0.00, z: '#46629f', h: '#ffa874', sun: '#ffb485', sunI: 1.5, hs: '#a9b6e0', hg: '#5b4a52', hi: 0.95, moon: 0.0, stars: 0.15, cloud: '#ffc4a0' },
-  { t: 0.06, z: '#4b83d4', h: '#ffd8a8', sun: '#ffdcb8', sunI: 2.6, hs: '#bcd0f2', hg: '#6a5e55', hi: 1.25, moon: 0.0, stars: 0.0, cloud: '#ffe6d0' },
-  { t: 0.25, z: '#2c7cf0', h: '#c2e3ff', sun: '#fff6e4', sunI: 3.2, hs: '#c4dcff', hg: '#6e6656', hi: 1.5, moon: 0.0, stars: 0.0, cloud: '#ffffff' },
-  { t: 0.44, z: '#4a86d6', h: '#ffe0b4', sun: '#ffe2b8', sunI: 2.7, hs: '#bcd0f0', hg: '#6a5e55', hi: 1.3, moon: 0.0, stars: 0.0, cloud: '#fff0e0' },
-  { t: 0.50, z: '#36427f', h: '#ff7a45', sun: '#ff9a58', sunI: 1.5, hs: '#9a86b8', hg: '#4e3c42', hi: 0.9, moon: 0.0, stars: 0.1, cloud: '#ff9a84' },
-  { t: 0.56, z: '#171d4e', h: '#8a4a6e', sun: '#ff7040', sunI: 0.9, hs: '#4a4a88', hg: '#2a2438', hi: 0.62, moon: 0.55, stars: 0.6, cloud: '#6a5a80' },
-  { t: 0.64, z: '#070c2a', h: '#1b2a58', sun: '#000000', sunI: 0.0, hs: '#3a4c8c', hg: '#161a34', hi: 0.7, moon: 1.0, stars: 1.0, cloud: '#323c64' },
-  { t: 0.86, z: '#070c2a', h: '#1b2a58', sun: '#000000', sunI: 0.0, hs: '#3a4c8c', hg: '#161a34', hi: 0.7, moon: 1.0, stars: 1.0, cloud: '#323c64' },
-  { t: 0.94, z: '#17224f', h: '#5a4a7a', sun: '#ff7040', sunI: 0.4, hs: '#4a5090', hg: '#2a2438', hi: 0.68, moon: 0.6, stars: 0.55, cloud: '#4c4a6c' },
-  { t: 1.00, z: '#46629f', h: '#ffa874', sun: '#ffb485', sunI: 1.5, hs: '#a9b6e0', hg: '#5b4a52', hi: 0.95, moon: 0.0, stars: 0.15, cloud: '#ffc4a0' },
+  { t: 0.00, z: '#4f78c0', h: '#ff9a58', sun: '#ffb070', sunI: 2.5, hs: '#b0b8e8', hg: '#8a6a5e', hi: 1.15, moon: 0.0, stars: 0.12, cloud: '#ffb890' },
+  { t: 0.05, z: '#3f80e0', h: '#ffbe78', sun: '#ffd0a0', sunI: 3.0, hs: '#c0d0f4', hg: '#8a7a64', hi: 1.3, moon: 0.0, stars: 0.0, cloud: '#ffe0c0' },
+  { t: 0.12, z: '#2877ec', h: '#a8d2ff', sun: '#fff0d8', sunI: 3.2, hs: '#c4dcff', hg: '#8c7e64', hi: 1.45, moon: 0.0, stars: 0.0, cloud: '#ffffff' },
+  { t: 0.25, z: '#2872ee', h: '#b4dcff', sun: '#fff6e4', sunI: 3.2, hs: '#c4dcff', hg: '#8c8068', hi: 1.5, moon: 0.0, stars: 0.0, cloud: '#ffffff' },
+  { t: 0.42, z: '#4a86d6', h: '#ffe0b4', sun: '#ffe2b8', sunI: 2.9, hs: '#bcd0f0', hg: '#8a7a64', hi: 1.35, moon: 0.0, stars: 0.0, cloud: '#fff0e0' },
+  { t: 0.50, z: '#3a4488', h: '#ff7440', sun: '#ff9650', sunI: 2.5, hs: '#a890c0', hg: '#7a5a64', hi: 1.15, moon: 0.0, stars: 0.1, cloud: '#ff9a84' },
+  { t: 0.56, z: '#1c2358', h: '#a05078', sun: '#ff7c48', sunI: 1.7, hs: '#6a60a0', hg: '#4a4060', hi: 0.9, moon: 0.7, stars: 0.6, cloud: '#7a6090' },
+  { t: 0.64, z: '#070c2a', h: '#1b2a58', sun: '#000000', sunI: 0.0, hs: '#3e5090', hg: '#2c3358', hi: 0.8, moon: 1.0, stars: 1.0, cloud: '#323c64' },
+  { t: 0.86, z: '#070c2a', h: '#1b2a58', sun: '#000000', sunI: 0.0, hs: '#3e5090', hg: '#2c3358', hi: 0.8, moon: 1.0, stars: 1.0, cloud: '#323c64' },
+  { t: 0.94, z: '#1c2858', h: '#6a527e', sun: '#ff8050', sunI: 1.6, hs: '#5a60a0', hg: '#4a4060', hi: 0.95, moon: 0.7, stars: 0.5, cloud: '#6a5a80' },
+  { t: 1.00, z: '#4f78c0', h: '#ff9a58', sun: '#ffb070', sunI: 2.5, hs: '#b0b8e8', hg: '#8a6a5e', hi: 1.15, moon: 0.0, stars: 0.12, cloud: '#ffb890' },
 ].map((k) => ({
   t: k.t, z: C(k.z), h: C(k.h), sun: C(k.sun), sunI: k.sunI, hs: C(k.hs), hg: C(k.hg), hi: k.hi, moon: k.moon, stars: k.stars, cloud: C(k.cloud),
 }));
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const MOONCOL = new THREE.Color(0.5, 0.64, 1.0);
 const EAST = new THREE.Vector3(1, 0, 0);
 const UPV = new THREE.Vector3(0, 1, 0.35).normalize();
 const AXIS = new THREE.Vector3().crossVectors(EAST, UPV).normalize();
@@ -28,6 +30,7 @@ export function createSkyState() {
     zenith: new THREE.Color(), horizon: new THREE.Color(), sunColor: new THREE.Color(), hemiSky: new THREE.Color(), hemiGround: new THREE.Color(),
     cloud: new THREE.Color(), sunDir: new THREE.Vector3(), moonDir: new THREE.Vector3(),
     sunI: 0, moonI: 0, hemiI: 1, stars: 0, sunElev: 1, angle: 0,
+    keyDir: new THREE.Vector3(0, 1, 0), keyColor: new THREE.Color(), keyI: 0,
   };
 }
 
@@ -52,8 +55,17 @@ export function computeSky(t, out) {
   out.sunDir.copy(EAST).multiplyScalar(Math.cos(ang)).addScaledVector(UPV, Math.sin(ang)).normalize();
   out.moonDir.copy(out.sunDir).negate();
   out.sunElev = out.sunDir.y;
-  out.sunI = sunBase * smooth(-0.06, 0.12, out.sunDir.y);
-  out.moonI = 0.7 * moonBase * smooth(-0.06, 0.15, out.moonDir.y);
+  // golden hour keeps a strong warm side light; it only fades once the sun is well below the horizon
+  out.sunI = sunBase * (0.45 + 0.55 * smooth(-0.1, 0.28, out.sunDir.y)) * smooth(-0.34, -0.1, out.sunDir.y);
+  out.moonI = 0.7 * moonBase * smooth(-0.12, 0.15, out.moonDir.y);
+  // single key light that cross-fades sun -> moon (direction, colour and intensity) so shadows never pop
+  const w = smooth(-0.2, -0.02, out.sunDir.y);
+  out.keyDir.copy(out.sunDir).multiplyScalar(w).addScaledVector(out.moonDir, 1 - w);
+  if (out.keyDir.lengthSq() < 1e-4) out.keyDir.copy(out.sunDir);
+  out.keyDir.normalize();
+  if (out.keyDir.y < 0.16) { out.keyDir.y = 0.16; out.keyDir.normalize(); }
+  out.keyColor.copy(out.sunColor).lerp(MOONCOL, 1 - w);
+  out.keyI = out.sunI * w + out.moonI * 1.1 * (1 - w);
   return out;
 }
 
@@ -279,7 +291,7 @@ export class Sky {
       uniforms: { uMap: { value: moonTexture() }, uAlpha: { value: 1 }, uBright: { value: 1.25 } },
     });
     this.moon = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.moonMat);
-    this.moon.scale.setScalar(90);
+    this.moon.scale.setScalar(130);
     this.moon.renderOrder = -880; this.moon.frustumCulled = false;
     this.group.add(this.moon);
 

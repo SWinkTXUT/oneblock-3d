@@ -225,7 +225,7 @@ D.amethyst = (t) => {
 
 // ---------- ores ----------
 D.coal_ore = (t) => oreOn(t, (p) => stoneBase(p, 61), P('#101012', '#1c1c20', '#2a2a30', '#3b3b42'), 201, 8, false);
-D.iron_ore = (t) => oreOn(t, (p) => stoneBase(p, 61), P('#b58a6c', '#cfa285', '#e0b99e', '#f0d2bc'), 202, 7, true);
+D.iron_ore = (t) => oreOn(t, (p) => stoneBase(p, 61), P('#c0643c', '#dc7f52', '#ecA070'.toLowerCase(), '#ffd0a8'), 202, 7, true);
 D.gold_ore = (t) => oreOn(t, (p) => stoneBase(p, 61), P('#d8a410', '#f0c21e', '#fcdc3c', '#fff59a'), 203, 7, true);
 D.diamond_ore = (t) => oreOn(t, (p) => stoneBase(p, 61), P('#22b8c0', '#3ad8dc', '#6ff0f0', '#d8ffff'), 204, 6, true);
 D.quartz_ore = (t) => oreOn(t, netherBase, P('#d6cfc4', '#e8e2d8', '#f6f2ea', '#ffffff'), 205, 8, true);
@@ -260,7 +260,7 @@ function logTop(t, ring, bark, seed) {
     }
   }
 }
-D.oak_log_side = (t) => logSide(t, P('#3a2815', '#46321b', '#553c21', '#654a2a', '#755733'), 301);
+D.oak_log_side = (t) => logSide(t, P('#5a4122', '#684c29', '#7a5a33', '#8b6840', '#9c7849'), 301);
 D.oak_log_top = (t) => logTop(t, P('#b48d55', '#9c7743'), P('#46321b', '#553c21', '#3a2815'), 302);
 D.spruce_log_side = (t) => logSide(t, P('#251a0f', '#2e2013', '#3a2819', '#47321f', '#563c26'), 311);
 D.spruce_log_top = (t) => logTop(t, P('#7b5a37', '#664a2c'), P('#2e2013', '#3a2819', '#251a0f'), 312);

@@ -41,6 +41,7 @@ export class Goals {
     const g = GOALS.find((x) => x.id === id); if (!g) return;
     this.done[id] = true;
     this.game.ui.toast(g.name, g.desc);
+    this.game.goalHintT = 10;
     this.game.sound.play('achievement');
   }
 
@@ -55,6 +56,9 @@ export class Goals {
     if (!this.done.phase4 && (g.state.blocksBroken >= 400 || g.cycle > 1)) this.award('phase4');
     if (!this.done.cycle && g.cycle > 1) this.award('cycle');
   }
+
+  /** First goal not yet done. */
+  next() { return GOALS.find((x) => !this.done[x.id]) || null; }
 
   get count() { return GOALS.filter((x) => this.done[x.id]).length; }
   serialize() { return { ...this.done }; }

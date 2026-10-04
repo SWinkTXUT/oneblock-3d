@@ -7,7 +7,7 @@ import { getIconPix, tilePix } from './sprites.js';
 import { Pix, hash, mulberry32 } from './pixel.js';
 
 export const TILE = 16;
-const PAD = 2;
+const PAD = 8; // extruded border: safe through mip level 3
 const CELL = TILE + PAD * 2;
 
 export function collectTileKeys() {
@@ -54,7 +54,7 @@ export function getAtlas() {
       padded.set(x, y, c, c[3]);
       if (em) {
         const f = em(sx, sy, c);
-        epad.set(x, y, [c[0] * f, c[1] * f, c[2] * f], 255);
+        epad.set(x, y, [c[0] * f * 0.8, c[1] * f * 0.8, c[2] * f * 0.8], 255);
       } else epad.set(x, y, [0, 0, 0], 255);
     }
     ctx.putImageData(pixToImageData(padded), cx, cy);
@@ -67,8 +67,9 @@ export function getAtlas() {
     const t = new THREE.CanvasTexture(cv);
     t.colorSpace = THREE.SRGBColorSpace;
     t.magFilter = THREE.NearestFilter;
-    t.minFilter = THREE.NearestFilter;
-    t.generateMipmaps = false;
+    t.minFilter = THREE.NearestMipmapLinearFilter; // crisp up close, no shimmer in the distance
+    t.generateMipmaps = true;
+    t.anisotropy = 4;
     t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
     return t;
   };

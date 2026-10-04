@@ -31,6 +31,17 @@
 ### Fixed after Builder B's report
 - Held block / `createItemMesh` cubes rendered black because the shared item material uses vertex colours and the box geometry had none; now has a white colour attribute. Empty-hand/ambience lighting for the viewmodel now has a brightness floor and picks up nearby torch light.
 
+### Round 2 (visuals critic fixes)
+- **Golden hour:** one key light (`st.keyDir/keyColor/keyI`) cross-fades sun to moon in direction, colour and intensity (no pop, direction floored at about 9 degrees above the horizon so it never lights from below); sun intensity only fades once the sun is well below the horizon. Hemisphere ground colours lifted at every keyframe, so dusk/dawn are never darker than night. Verified at t=0.0, 0.1, 0.25, 0.5, 0.75 in the demo.
+- **Dawn palette:** more saturated horizon at t=0.0/0.05, bluer zenith, new t=0.12 keyframe (clear saturated blue); t=0.05-0.15 is the "gorgeous" range for Builder B's start time (t about 0.10).
+- **Point lights/emissive:** torch/glow lights scale by darkness (22% at noon, 100% at night), shorter range, emissive atlas capped (x0.8 atlas, 0.75 intensity), bloom strength/threshold ease with daylight. Glowstone keeps its texture in daylight.
+- **Viewmodel:** arm has a shaded pixel skin texture and a visible sleeve+cuff; held items use their own material with emissive 0.22 (held glowstone no longer blows out).
+- **Performance:** high-quality max pixel ratio 1.5; adaptive uses discrete levels (1.0 / 1.25 / 1.5), floor 1.0 (then sheds bloom), hysteresis, ignores hidden tabs, frames > 250 ms and 60 frames after any change, so the composer target is rarely reallocated. Particle update/uploads skipped when nothing is alive.
+- **Brightness of sides:** side faces x1.05, oak bark lightened.
+- **Phases:** each phase now replaces the sky with its own midday zenith/horizon colours (scaled by time-of-day brightness) plus light/exposure/fog/cloud changes: underground cool+dim, snow crisp blue-white, desert golden, caverns violet-teal dark, ember deep red-orange with near-black clouds, skylands violet/teal. 3 s blend.
+- **P2:** atlas now has 8 px extruded padding, mipmaps (NearestMipmapLinear) and anisotropy 4; unknown block ids are dropped to air in `deserialize` (warn once) and skipped by the mesher; water renders after glass; water under a solid ceiling is full height; leaf-leaf shared faces culled; `raycast` ignores the cell containing the origin (never returns a zero normal; inside a block it reports the first surface the ray exits into, or null); sun/moon handover is smooth so shadows do not snap. Also: moon bigger, iron ore flecks stronger, per-frame Vector3 allocations hoisted.
+- Skipped: P2 emitter-scan throttling, shadow edge fade, A/B API tidy-ups (B can use `setViewmodelVisible`).
+
 ### Known issues / gaps
 - Not verified: real pointer lock / mouse feel in the demo, and real-time fps on an M-series Mac (the test pane is a hidden, throttled tab; I measured with forced GPU sync: 5769 blocks at 1024x768 high quality = 9.5 ms/frame, one chunk remesh = 2 ms, full 22-chunk mesh = 60 ms).
 - Leaf and spruce textures show dark specks where holes expose shadowed interior leaves (looks like Minecraft fancy leaves, but can read busy at distance).
@@ -73,7 +84,6 @@ WASD move, mouse look, LMB hold break/attack, RMB use/place/eat (hold), Shift sn
 
 ### Open requests / notes for Builder A / lead
 - **Viewmodel arm / block looked solid black in my in-game test** (empty hand and a held `oak_log` block rendered as a black silhouette lower-right; held sprite tools such as the wooden pickaxe looked fine). Please check the viewmodel lighting for the 'arm' and 'block' modes in the real game (demo may differ because time/ambience calls differ).
-- I hide the hand on the title screen with `renderer.hand.visible = false` (an internal field; guarded, ignored if absent). A public `setViewmodelVisible(bool)` would be cleaner.
 - I rely on `renderer.renderer.domElement` being the only `<canvas>` inside the container (pointer lock element).
 - `renderer.getMobTexture` is unused (mobs draw their own textures).
 - No changes needed to `blocks.js` / `items.js`.
@@ -83,6 +93,16 @@ WASD move, mouse look, LMB hold break/attack, RMB use/place/eat (hold), Shift sn
 - `node src/game/__tests__/sim.test.mjs` (6 tests, uses the real `World`): stand on the block, jump height, sneak edge guard, void death, fall damage, hunger regen/starve, furnace timing and lit swap, sapling to tree, crops, farmland decay, torch registry.
 - Browser (Vite dev server, real renderer): punch to logs to planks/table/pickaxe through the recipe book DOM, mob kills and drops, shears, furnace running while closed, chest moves, bed/sleep, death/void/respawn, save and reload, bucket/hoe/seeds, phase change, soak test, all 38 sounds execute.
 - Not testable in my headless pane: real pointer lock (a click-to-resume fallback via the pause menu is built in), and real-time frame rate (sim cost measured at about 0.2 ms/frame; rendering cost is Builder A's).
+
+### Round 2 (gameplay critic fixes, lead decisions applied)
+- **P0-1 zombie on the new player.** `src/game/spawning.js` (pure): phase mob spawns now pick another walkable cell within 4 of the One Block, at least 1.5 from the player and never in the player's column; no spot means no mob. A zombie roll becomes a sheep until the island has >= 12 walkable surface blocks. Player knockback is now a capped 0.35-block displacement (no upward launch) that goes through the sneak edge guard. Regression tests in `src/game/__tests__/sim.test.mjs` (spawn planning and knockback/edge cases).
+- **Onboarding.** New worlds start at t=60 s (about 0.10 renderer time) with the player looking down. Deviation: pitch is -1.30 rad (about -74 degrees), not -55 degrees, because from eye height 1.62 any pitch shallower than about -73 degrees misses the 1x1 block and LMB would do nothing. Hint bar (bottom centre): break block, E craft planks, craft table, place table, craft pickaxe, sneak (once, until used or 12 s), then "Goal: ..." for 10 s after each goal. Goal tracker under the phase bar always shows the next unmet goal.
+- **Smart placement.** Top-face hit blocked by your own body places at the hit block's level in the dominant horizontal look direction. With nothing targeted at shallow pitch while standing on a block, RMB bridges from the block under your feet the same way.
+- **Saving.** No save while dead or y < -30. The death snapshot (taken at death, includes the death-drop items, empty inventory, respawned player) is the good state; Save & Quit from the death screen reloads it instead of overwriting it. Dropped items are now saved (override of SPEC section 13); items in the void are lost.
+- **Night.** Spawn ring 4-24; cap = clamp(floor(surface/25), 0, 6); one attempt every 8 s. Zombies rise from the ground for 1.5 s (particles, cannot attack, cannot move). Dusk toast "Night is falling" once per night.
+- Title screen uses its own clock and never touches the world clock. "Inventory full" message (rate limited). Recipe rows keep a fixed order (only dim/bright changes). Hunger: block break exhaustion 0.04, walking 0.02/m (sprint 0.1/m). Uses `renderer.setViewmodelVisible`.
+- Also fixed: single Play button on fresh install, goals window pauses the world, shift-click of logs falls through to fuel when the furnace input is occupied by something else.
+- Not done: gold/quartz/obsidian/amethyst/magma stay dead-end materials (no suitable items exist; a golden apple would need a new item in `items.js`). Day/night gap (P2-12), leather armor rebalance (P2-9), mob geometry disposal (P2-13), "click to resume" hint (P2-11) left as is.
 
 ### Known gaps / issues
 - Real pointer lock, mouse feel and audio output were not verified by ear/hand, only by logic and simulated input.

@@ -7,6 +7,7 @@ import { Inventory, makeStack } from '../Inventory.js';
 import { newFurnace, tickFurnace, serializeEntities, deserializeEntities, newChest } from '../BlockEntities.js';
 import { Growth } from '../Growth.js';
 import { Events } from '../Events.js';
+import { planPhaseSpawn, phaseSpawnSpots, countSurface, zombieCap } from '../spawning.js';
 
 let pass = 0;
 const t = (n, f) => { f(); pass++; console.log('ok  -', n); };
@@ -102,6 +103,61 @@ t('sapling grows into a tree; crops advance; farmland reverts', () => {
   w.setBlock(1, 1, 1, B('torch'));
   assert.ok(gr.nearTorch(5, 1, 5, 7)); assert.ok(!gr.nearTorch(10, 1, 10, 7));
   w.setBlock(1, 1, 1, 0); assert.ok(!gr.nearTorch(1, 1, 1, 7));
+});
+
+t('P0-1 regression: phase zombies never spawn in the player column / without room', () => {
+  const WATER = B('water');
+  const w = new World(); w.setBlock(0, 0, 0, B('stone'));
+  const p = new Player(); p.reset(0.5, 1, 0.5);
+  // bare 1x1 island, player on it: nowhere valid to spawn -> nothing at all (certainly not a zombie)
+  assert.equal(phaseSpawnSpots(w, p, WATER).length, 0);
+  assert.equal(planPhaseSpawn(w, p, 'zombie', WATER), null);
+  assert.equal(planPhaseSpawn(w, p, 'sheep', WATER), null);
+  // small island (< 12 surface blocks): zombie roll becomes a sheep, away from the player
+  for (let x = -1; x <= 1; x++) for (let z = -1; z <= 1; z++) w.setBlock(x, 0, z, B('stone'));
+  assert.ok(countSurface(w) < 12);
+  for (let i = 0; i < 200; i++) {
+    const r = planPhaseSpawn(w, p, 'zombie', WATER, Math.random);
+    if (!r) continue;
+    assert.equal(r.kind, 'sheep');
+    assert.ok(Math.hypot(r.x - p.x, r.z - p.z) >= 1.5 && !(Math.floor(r.x) === 0 && Math.floor(r.z) === 0));
+  }
+  // big island: zombies allowed, still never in the player's column or within 1.5
+  for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) w.setBlock(x, 0, z, B('stone'));
+  assert.ok(countSurface(w) >= 12);
+  let zombies = 0;
+  for (let i = 0; i < 300; i++) {
+    const r = planPhaseSpawn(w, p, 'zombie', WATER, Math.random);
+    assert.ok(r); if (r.kind === 'zombie') zombies++;
+    assert.ok(Math.hypot(r.x - p.x, r.z - p.z) >= 1.5);
+    assert.ok(Math.abs(r.x - 0.5) <= 4.5 && Math.abs(r.z - 0.5) <= 4.5);
+  }
+  assert.ok(zombies > 0);
+  assert.equal(zombieCap(0), 0); assert.equal(zombieCap(24), 0); assert.equal(zombieCap(50), 2); assert.equal(zombieCap(9999), 6);
+});
+
+t('P0-1 regression: knockback <= 0.35 blocks and sneaking never pushes you off the edge', () => {
+  const hitFrom = (p, w, fx, fz) => {
+    p.hurt(3, 'Slain by Zombie', { from: { x: fx, z: fz } }, {});
+    const x0 = p.x, z0 = p.z;
+    run(p, w, 1, p.sneaking ? { ...none, sneak: true } : none);
+    return Math.hypot(p.x - x0, p.z - z0);
+  };
+  // sneaking, standing right at every edge, zombie pushing outward: stays on the island
+  for (const [px, pz, fx, fz] of [[0.35, 0.5, 1.5, 0.5], [0.65, 0.5, -0.5, 0.5], [0.5, 0.2, 0.5, 1.5], [0.5, 0.8, 0.5, -0.5], [0.5, 0.5, 0.5, 0.5]]) {
+    const w = new World(); w.setBlock(0, 0, 0, B('grass'));
+    const p = new Player(); p.reset(px, 1, pz); run(p, w, 0.3, { ...none, sneak: true });
+    const d = hitFrom(p, w, fx, fz);
+    assert.ok(p.y > 0.99 && p.onGround, `fell: ${px},${pz} y=${p.y}`);
+    assert.ok(d <= 0.36, `travel ${d}`);
+  }
+  // not sneaking, dead centre: pushed but only <= 0.35, no airborne launch
+  const w = new World(); w.setBlock(0, 0, 0, B('grass'));
+  const p = new Player(); p.reset(0.5, 1, 0.5); run(p, w, 0.3, none);
+  p.hurt(3, 'z', { from: { x: 1.2, z: 0.5 } }, {});
+  const vyMax = (() => { let m = 0; for (let i = 0; i < 30; i++) { p.update(1 / 60, none, w, {}); m = Math.max(m, p.vy); } return m; })();
+  assert.ok(vyMax < 0.5, 'no upward launch');
+  assert.ok(Math.abs(p.x - 0.5) <= 0.36 && p.y > 0.99);
 });
 
 console.log(`\n${pass} sim tests passed`);

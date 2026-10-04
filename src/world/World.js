@@ -122,7 +122,7 @@ export class World {
     return out;
   }
 
-  // Voxel DDA (Amanatides & Woo). Skips air and water. Starting inside a block returns dist 0, zero normal.
+  // Voxel DDA (Amanatides & Woo). Skips air and water. The cell containing the origin is ignored (never hit with a zero normal).
   raycast(origin, dir, maxDist) {
     let dx = dir.x, dy = dir.y, dz = dir.z;
     const len = Math.hypot(dx, dy, dz);
@@ -140,7 +140,8 @@ export class World {
     let nx = 0, ny = 0, nz = 0, t = 0;
     for (let i = 0; i < 2048; i++) {
       const id = this.getBlock(x, y, z);
-      if (id !== 0 && id !== WATER) return { x, y, z, id, normal: { x: nx, y: ny, z: nz }, dist: t };
+      // starting inside a block: skip that cell so the ray reports the first surface it exits into (sensible normal)
+      if (id !== 0 && id !== WATER && i > 0) return { x, y, z, id, normal: { x: nx, y: ny, z: nz }, dist: t };
       if (tmx < tmy && tmx < tmz) {
         t = tmx; if (t > maxDist) return null;
         x += sx; tmx += tdx; nx = -sx; ny = 0; nz = 0;
@@ -216,6 +217,10 @@ export class World {
           }
           p += run;
         }
+        // drop ids this build does not know (corrupt/newer save) instead of crashing the mesher
+        let bad = 0;
+        for (let i = 0; i < c.data.length; i++) if (c.data[i] && !BLOCKS[c.data[i]]) { c.data[i] = 0; c.count--; bad++; }
+        if (bad && !World._warned) { World._warned = true; console.warn(`World.deserialize: replaced ${bad}+ unknown block ids with air`); }
         if (!c.count) continue;
         const key = chunkKey(cx, cy, cz);
         this.chunkArr[key] = c;

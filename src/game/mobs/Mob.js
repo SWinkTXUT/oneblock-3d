@@ -66,7 +66,7 @@ export class Mob {
   }
 
   sync() {
-    this.group.position.set(this.x, this.y, this.z);
+    this.group.position.set(this.x, this.y + (this.yOff || 0), this.z);
     this.group.rotation.y = this.ry;
   }
 

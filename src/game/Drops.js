@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { moveEntity } from './physics.js';
 import { maxStack, maxDurability } from './Inventory.js';
+import { ITEMS } from '../data/items.js';
 
 const MAX_DROPS = 140;
 
@@ -43,6 +44,7 @@ export class Drops {
       if (!remove) {
         const dx = p.x - d.x, dy = p.y + 0.9 - (d.y + 0.1), dz = p.z - d.z;
         const dist = Math.hypot(dx, dy, dz);
+        if (!p.dead && d.delay <= 0 && dist < 1.2 && !g.inv.canAdd(d.key, 1)) g.inventoryFullHint();
         if (!p.dead && d.delay <= 0 && dist < 1.5 && g.inv.canAdd(d.key, 1)) {
           // magnetise
           d.vx = dx / dist * 8; d.vy = dy / dist * 8; d.vz = dz / dist * 8;
@@ -84,6 +86,14 @@ export class Drops {
         }
       }
     }
+  }
+
+  serialize() {
+    return this.list.filter((d) => d.y > -30).slice(0, 100).map((d) => [d.key, d.n, d.dur === undefined ? -1 : d.dur, +d.x.toFixed(2), +d.y.toFixed(2), +d.z.toFixed(2)]);
+  }
+  restore(arr) {
+    this.clear();
+    for (const [key, n, dur, x, y, z] of arr || []) if (ITEMS[key]) this.spawn(key, n, x, y + 0.05, z, { x: 0, y: 0, z: 0 }, dur >= 0 ? dur : undefined);
   }
 
   clear() { for (const d of this.list) d.group.removeFromParent(); this.list.length = 0; }

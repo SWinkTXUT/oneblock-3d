@@ -86,6 +86,7 @@ export class Particles {
   setScale(s) { this.mat.uniforms.uScale.value = s; }
 
   _emit(x, y, z, vx, vy, vz, col, size, life, o = {}) {
+    this.liveT = Math.max(this.liveT || 0, life + 0.1);
     const i = this.next; this.next = (this.next + 1) % this.max;
     const k = i * 3;
     this.pos[k] = x; this.pos[k + 1] = y; this.pos[k + 2] = z;
@@ -150,6 +151,8 @@ export class Particles {
   }
 
   update(dt) {
+    if (!(this.liveT > 0)) return; // nothing alive: skip the loop and the GPU uploads
+    this.liveT -= dt;
     const N = this.max;
     for (let i = 0; i < N; i++) {
       if (this.life[i] <= 0) { this.alphaA[i] = 0; continue; }

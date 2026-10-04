@@ -16,14 +16,16 @@ import { Sky, computeSky, createSkyState } from './sky.js';
 import { Particles } from './particles.js';
 import { buildItemObject } from './itemMesh.js';
 
+// color = zenith colour at midday, hcolor = horizon colour at midday (scaled down automatically as the day gets darker),
+// s = how fully the phase replaces the normal sky, cm = cloud brightness, fog = fog distance, light = light multiplier, ex = exposure
 const PHASE_TINTS = {
-  plains: { color: '#ffffff', s: 0, fog: 1.0, light: 1.0 },
-  underground: { color: '#8ea2bc', s: 0.3, fog: 0.9, light: 0.92 },
-  snow: { color: '#d4eaff', s: 0.42, fog: 0.72, light: 1.02 },
-  desert: { color: '#ffc97a', s: 0.4, fog: 0.95, light: 1.05 },
-  caverns: { color: '#5a40b4', s: 0.5, fog: 0.8, light: 0.85 },
-  ember: { color: '#ff4a1c', s: 0.58, fog: 0.72, light: 0.95 },
-  skylands: { color: '#ff90d4', s: 0.36, fog: 1.1, light: 1.02 },
+  plains: { color: '#2872ee', hcolor: '#b4dcff', s: 0, cm: 1, fog: 1.0, light: 1.0, ex: 1 },
+  underground: { color: '#1c3048', hcolor: '#40607e', s: 0.95, cm: 0.5, fog: 0.5, light: 0.72, ex: 0.92 },
+  snow: { color: '#5ca6f2', hcolor: '#f2f9ff', s: 0.9, cm: 1.15, fog: 0.7, light: 1.06, ex: 1.03 },
+  desert: { color: '#f2b04a', hcolor: '#ffe2a0', s: 0.92, cm: 1.05, fog: 0.95, light: 1.1, ex: 1.04 },
+  caverns: { color: '#241a52', hcolor: '#2c7090', s: 0.93, cm: 0.45, fog: 0.62, light: 0.76, ex: 0.95 },
+  ember: { color: '#5c0c06', hcolor: '#ff5214', s: 0.95, cm: 0.25, fog: 0.58, light: 0.98, ex: 0.98 },
+  skylands: { color: '#7a52e6', hcolor: '#68e8d6', s: 0.88, cm: 1.0, fog: 1.1, light: 1.02, ex: 1.0 },
 };
 
 const EMITTER_COLOR = {
@@ -31,6 +33,7 @@ const EMITTER_COLOR = {
 };
 const NUM_LIGHTS = 8;
 const tmpC = new THREE.Color();
+const V_R = new THREE.Vector3(), V_U = new THREE.Vector3();
 const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -50,9 +53,9 @@ export class Renderer {
 
     const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false });
     this.renderer = renderer;
-    this.maxPixelRatio = Math.min(window.devicePixelRatio || 1, 1.75);
+    this.maxPixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
     this.pixelRatio = this.maxPixelRatio;
-    this._ad = { t: 0, n: 0, calm: 0, ceiling: this.maxPixelRatio };
+    this._ad = { t: 0, n: 0, calm: 0, hold: 0, skip: 60 };
     renderer.setPixelRatio(this.pixelRatio);
     renderer.setSize(w, h);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -103,8 +106,10 @@ export class Renderer {
     // ---- sky
     this.sky = new Sky(this.scene);
     this.st = createSkyState();
-    this.tint = { color: new THREE.Color('#ffffff'), s: 0, fog: 1, light: 1 };
-    this.tintTarget = { color: new THREE.Color('#ffffff'), s: 0, fog: 1, light: 1 };
+    const mkTint = () => ({ color: new THREE.Color('#ffffff'), hcolor: new THREE.Color('#ffffff'), s: 0, b: 1, cm: 1, fog: 1, light: 1, ex: 1 });
+    this.tint = mkTint();
+    { const ns = computeSky(0.25, createSkyState()); this.refZ = lum(ns.zenith); this.refH = lum(ns.horizon); }
+    this.tintTarget = mkTint();
 
     // ---- particles
     this.particles = new Particles(this.scene, this.atlas);
@@ -149,7 +154,7 @@ export class Renderer {
 
   _makeMaterials() {
     const atlas = this.atlas;
-    const base = { map: atlas.texture, vertexColors: true, emissiveMap: atlas.emissive, emissive: new THREE.Color(1, 1, 1), emissiveIntensity: 1.0 };
+    const base = { map: atlas.texture, vertexColors: true, emissiveMap: atlas.emissive, emissive: new THREE.Color(1, 1, 1), emissiveIntensity: 0.75 };
     this.matOpaque = new THREE.MeshLambertMaterial({ ...base });
     this.matCutout = new THREE.MeshLambertMaterial({ ...base, alphaTest: 0.5 });
     this.matTrans = new THREE.MeshLambertMaterial({ map: atlas.texture, vertexColors: true, transparent: true, depthWrite: false, alphaTest: 0.02 });
@@ -179,6 +184,7 @@ export class Renderer {
     this.matWater.customProgramCacheKey = () => 'oneblock-water';
     // dropped / held item cube material shares the cutout material
     this.matItem = this.matCutout;
+    this.matHeld = new THREE.MeshLambertMaterial({ ...base, alphaTest: 0.5, emissiveIntensity: 0.22 });
   }
 
   _makeOverlays(w, h) {
@@ -219,19 +225,29 @@ export class Renderer {
     this.heldObj = null;
     this.swing = 1; // 0..1 progress, 1 = idle
     this.equip = 1;
-    this.armMat = new THREE.MeshLambertMaterial({ color: 0xc58a62 });
-    this.sleeveMat = new THREE.MeshLambertMaterial({ color: 0x2f7fa3 });
     this._buildArm();
     this.setHeldItem(null);
   }
 
   _buildArm() {
+    const tex = (fn) => {
+      const c = document.createElement('canvas'); c.width = c.height = 8;
+      const g = c.getContext('2d');
+      for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { g.fillStyle = fn(x, y); g.fillRect(x, y, 1, 1); }
+      const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.generateMipmaps = false;
+      t.colorSpace = THREE.SRGBColorSpace; return t;
+    };
+    const j = (x, y, s) => { let h = Math.sin(x * 12.9898 + y * 78.233 + s) * 43758.5453; return h - Math.floor(h); };
+    const skin = tex((x, y) => { const v = 0.82 + j(x, y, 1) * 0.36 - (y > 5 ? 0.14 : 0) - (x < 2 ? 0.1 : 0); return `rgb(${200 * v | 0},${146 * v | 0},${108 * v | 0})`; });
+    const sleeve = tex((x, y) => { let v = 0.9 + j(x, y, 2) * 0.2; if (y === 0) v = 1.25; if (y === 1) v *= 0.75; return `rgb(${44 * v | 0},${112 * v | 0},${160 * v | 0})`; });
+    this.armMat = new THREE.MeshLambertMaterial({ map: skin });
+    this.sleeveMat = new THREE.MeshLambertMaterial({ map: sleeve });
     const g = new THREE.Group();
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.17, 0.62), this.armMat);
-    arm.position.z = -0.0;
-    const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.28), this.sleeveMat);
-    sleeve.position.z = 0.19;
-    g.add(arm, sleeve);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.36), this.armMat);
+    arm.position.z = -0.08;
+    const cuff = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.32), this.sleeveMat);
+    cuff.position.z = 0.26;
+    g.add(arm, cuff);
     this.armObj = g;
   }
 
@@ -296,8 +312,8 @@ export class Renderer {
 
   setPhaseAmbience(key) {
     const p = PHASE_TINTS[key] || PHASE_TINTS.plains;
-    this.tintTarget.color.set(p.color);
-    this.tintTarget.s = p.s; this.tintTarget.fog = p.fog; this.tintTarget.light = p.light;
+    this.tintTarget.color.set(p.color); this.tintTarget.hcolor.set(p.hcolor);
+    for (const f of ['s', 'cm', 'fog', 'light', 'ex']) this.tintTarget[f] = p[f];
     this.particles.ambient.setPhase(key);
     this.phaseKey = key;
   }
@@ -350,7 +366,7 @@ export class Renderer {
     this.heldMode = 'arm';
     if (key) {
       const def = BLOCK_BY_KEY[key];
-      const obj = buildItemObject(key, this.atlas, this.matItem, 1);
+      const obj = buildItemObject(key, this.atlas, this.matHeld, 1);
       const isSprite = !!obj.children[0]?.userData.isSprite;
       if (obj.children.length) {
         this.heldObj = obj;
@@ -388,9 +404,10 @@ export class Renderer {
     this.sun.castShadow = !low;
     this.useComposer = !low;
     this.maxLights = low ? 3 : NUM_LIGHTS;
-    this.maxPixelRatio = low ? 1 : Math.min(window.devicePixelRatio || 1, 1.75);
+    this.maxPixelRatio = low ? 1 : Math.min(window.devicePixelRatio || 1, 1.5);
     this.pixelRatio = this.maxPixelRatio;
-    this._ad = { t: 0, n: 0, calm: 0, ceiling: this.maxPixelRatio };
+    this._ad = { t: 0, n: 0, calm: 0, hold: 0, skip: 60 };
+    this.bloom.enabled = true;
     this.fogFar = low ? 78 : 140;
     this.sun.shadow.mapSize.set(low ? 512 : 2048, low ? 512 : 2048);
     if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
@@ -442,7 +459,7 @@ export class Renderer {
     let e = this.chunkMeshes.get(key);
     if (e) { for (const m of e.meshes) { e.group.remove(m); m.geometry.dispose(); } e.meshes.length = 0; }
     const mats = [this.matOpaque, this.matCutout, this.matTrans, this.matWater];
-    const orders = [0, 0, 3, 2];
+    const orders = [0, 0, 2, 3]; // glass/ice first, water after
     const meshes = [];
     let any = false;
     layers.forEach((L, i) => {
@@ -492,29 +509,41 @@ export class Renderer {
   }
 
   // ------------------------------------------------------------ per-frame
-  _applyTint(col, k) {
-    const L = lum(col);
-    const tl = Math.max(0.05, lum(this.tint.color));
-    tmpC.copy(this.tint.color).multiplyScalar(L / tl);
-    col.lerp(tmpC, this.tint.s * k);
+  // Replace the sky colour with the phase colour, keeping the time-of-day brightness (so night stays dark).
+  _applyTint(col, ref, horizon) {
+    if (this.tint.s < 1e-3) return;
+    const tc = horizon ? this.tint.hcolor : this.tint.color;
+    const f = Math.min(1.5, lum(col) / ref);
+    tmpC.copy(tc).multiplyScalar(f);
+    col.lerp(tmpC, this.tint.s);
+  }
+  // Hue-only tint that keeps luminance (hemisphere, key light, clouds).
+  _hueTint(col, k, mul = 1) {
+    if (this.tint.s < 1e-3) return;
+    const tc = this.tint.hcolor;
+    tmpC.copy(tc).multiplyScalar(lum(col) / Math.max(0.05, lum(tc)));
+    col.lerp(tmpC, Math.min(1, this.tint.s * k));
+    col.multiplyScalar(1 + (mul - 1) * this.tint.s);
   }
 
   _updateSkyAndLights(dt) {
     // tint transition (~3 s)
     const k = 1 - Math.exp(-dt * 1.3);
     this.tint.color.lerp(this.tintTarget.color, k);
-    this.tint.s += (this.tintTarget.s - this.tint.s) * k;
-    this.tint.fog += (this.tintTarget.fog - this.tint.fog) * k;
-    this.tint.light += (this.tintTarget.light - this.tint.light) * k;
+    this.tint.hcolor.lerp(this.tintTarget.hcolor, k);
+    for (const f of ['s', 'cm', 'fog', 'light', 'ex']) this.tint[f] += (this.tintTarget[f] - this.tint[f]) * k;
 
     const st = this.st;
     computeSky(this.timeOfDay, st);
-    this._applyTint(st.zenith, 0.95);
-    this._applyTint(st.horizon, 0.85);
-    this._applyTint(st.hemiSky, 0.6);
-    this._applyTint(st.cloud, 0.7);
-    this._applyTint(st.sunColor, 0.35);
+    this._applyTint(st.zenith, this.refZ, false);
+    this._applyTint(st.horizon, this.refH, true);
+    this._hueTint(st.hemiSky, 0.55);
+    this._hueTint(st.hemiGround, 0.3);
+    this._hueTint(st.cloud, 0.8, this.tint.cm);
+    this._hueTint(st.keyColor, 0.35);
     this.dayFactor = Math.min(1, st.hemiI / 1.3);
+    this.bloom.strength = 0.2 - 0.09 * this.dayFactor;
+    this.bloom.threshold = 1.25 + 0.35 * this.dayFactor;
 
     // fog
     const fog = this.scene.fog;
@@ -530,17 +559,16 @@ export class Renderer {
     this.hemi.color.copy(st.hemiSky);
     this.hemi.groundColor.copy(st.hemiGround);
     this.hemi.intensity = st.hemiI * 1.15 * lm;
-    const useSun = st.sunI >= st.moonI;
-    const dir = useSun ? st.sunDir : st.moonDir;
-    if (useSun) { this.sun.color.copy(st.sunColor); this.sun.intensity = st.sunI * lm; }
-    else { this.sun.color.setRGB(0.5, 0.64, 1.0); this.sun.intensity = st.moonI * 1.1; }
+    const dir = st.keyDir;
+    this.sun.color.copy(st.keyColor);
+    this.sun.intensity = st.keyI * lm;
     // follow the camera, snapped to shadow texels to avoid shimmer
     const cp = this.camera.position;
     const texel = (2 * this.shadowR) / this.sun.shadow.mapSize.x;
-    const r = new THREE.Vector3(0, 1, 0).cross(dir);
+    const r = V_R.set(0, 1, 0).cross(dir);
     if (r.lengthSq() < 1e-4) r.set(1, 0, 0);
     r.normalize();
-    const u = new THREE.Vector3().crossVectors(dir, r).normalize();
+    const u = V_U.crossVectors(dir, r).normalize();
     const tx = Math.round(cp.dot(r) / texel) * texel, ty = Math.round(cp.dot(u) / texel) * texel, tz = cp.dot(dir);
     const target = r.multiplyScalar(tx).addScaledVector(u, ty).addScaledVector(dir, tz);
     this.sun.target.position.copy(target);
@@ -556,7 +584,7 @@ export class Renderer {
     this.viewDir.intensity = Math.max(0.8, this.sun.intensity * 0.7) + (this.torchGlow || 0) * 1.2;
 
     // exposure: slightly brighter at night so the moonlit island stays readable
-    this.renderer.toneMappingExposure = 1.0 + (1 - this.dayFactor) * 0.28;
+    this.renderer.toneMappingExposure = (1.0 + (1 - this.dayFactor) * 0.28) * this.tint.ex;
 
     this.sky.update(dt, cp, st);
   }
@@ -608,9 +636,9 @@ export class Renderer {
       l.color.setRGB(col[0], col[1], col[2]);
       l.position.set(e.x + 0.5, e.y + (def.shape === 'torch' ? 0.8 : 0.5), e.z + 0.5);
       const flick = def.shape === 'torch' ? 1 + Math.sin(t * 9 + e.x * 3.1 + e.z * 1.7) * 0.05 + Math.sin(t * 23 + e.y) * 0.03 : 1;
-      const night = 1 + (1 - this.dayFactor) * 0.35;
-      l.intensity = def.light * 0.72 * flick * this.lightCur[i] * night;
-      l.distance = 8 + def.light * 0.85;
+      const dark = 0.22 + 0.78 * (1 - this.dayFactor); // point lights are subtle in daylight, full strength at night
+      l.intensity = def.light * 0.8 * flick * this.lightCur[i] * dark * (1 + (1 - this.dayFactor) * 0.3);
+      l.distance = 6 + def.light * 0.7;
     }
   }
 
@@ -635,24 +663,32 @@ export class Renderer {
     }
   }
 
-  // Dynamic resolution: keep ~60 fps on fill-rate-bound (retina) screens by trading pixel ratio.
+  // Dynamic resolution with a few discrete levels (no per-step target churn), hysteresis and warm-up.
+  _levels() {
+    const m = this.maxPixelRatio, L = [1.0, 1.25, 1.5].filter((v) => v <= m + 1e-6);
+    if (!L.length || Math.abs(L[L.length - 1] - m) > 1e-3) L.push(m);
+    return L;
+  }
   _adaptResolution(rawDt) {
     const a = this._ad;
-    if (!this.adaptive || rawDt > 0.25) return;
+    if (!this.adaptive || document.hidden || rawDt > 0.25) { a.t = 0; a.n = 0; return; }
+    if (a.skip > 0) { a.skip--; return; }
     a.t += rawDt; a.n++;
-    if (a.n < 40) return;
+    if (a.n < 45) return;
     const avg = a.t / a.n;
     a.t = 0; a.n = 0;
-    let next = this.pixelRatio;
-    if (avg > 0.0195 && this.pixelRatio > 0.8) {
-      next = Math.max(0.8, this.pixelRatio - 0.15);
-      a.ceiling = Math.min(a.ceiling, this.pixelRatio); // don't go back up to the ratio that was too slow...
-      a.calm = -6; // ...for a good while
-    } else if (avg < 0.0182) {
-      a.calm++;
-      if (a.calm >= 5 && this.pixelRatio < this.maxPixelRatio) { next = Math.min(this.maxPixelRatio, this.pixelRatio + 0.1); a.calm = 0; if (next >= a.ceiling) { next = this.pixelRatio; a.ceiling = Math.min(this.maxPixelRatio, a.ceiling + 0.15); } }
+    const L = this._levels();
+    let i = L.findIndex((v) => Math.abs(v - this.pixelRatio) < 1e-3); if (i < 0) i = L.length - 1;
+    if (avg > 0.0195) {
+      a.calm = 0; a.hold = 8; // stay down for 8 good windows (~6 s)
+      if (i > 0) i--;
+      else if (this.bloom.enabled && this.quality === 'high') this.bloom.enabled = false; // already at floor: shed bloom
+    } else if (avg < 0.0178) {
+      if (a.hold > 0) a.hold--;
+      else if (++a.calm >= 4 && i < L.length - 1) { i++; a.calm = 0; a.hold = 8; if (!this.bloom.enabled) this.bloom.enabled = true; }
     }
-    if (Math.abs(next - this.pixelRatio) > 1e-3) { this.pixelRatio = next; this._lw = -1; this.resize(); }
+    const next = L[i];
+    if (Math.abs(next - this.pixelRatio) > 1e-3) { this.pixelRatio = next; this._lw = -1; a.skip = 60; this.resize(); }
   }
 
   render(dt = 1 / 60) {

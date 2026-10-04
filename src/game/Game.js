@@ -15,6 +15,7 @@ import { Goals } from './Goals.js';
 import { MobManager } from './mobs/MobManager.js';
 import { breakInfo, rollDrops, materialOf } from './rules.js';
 import { overlapsCell } from './physics.js';
+import { countSurface, planPhaseSpawn } from './spawning.js';
 import { keyOf, newChest, newFurnace, tickFurnace, entityContents, serializeEntities, deserializeEntities } from './BlockEntities.js';
 import { loadSettings, readSave, writeSave, clearSave } from './Save.js';
 import { UI } from '../ui/UI.js';
@@ -86,8 +87,7 @@ export class Game {
 
   hasSave() { return !!readSave(); }
 
-  /** First-person hand is an optional nicety on Builder A's internals (renderer.hand); ignored if absent. */
-  setHandVisible(v) { if (this.renderer.hand) this.renderer.hand.visible = v; }
+  setHandVisible(v) { if (this.renderer.setViewmodelVisible) this.renderer.setViewmodelVisible(v); else if (this.renderer.hand) this.renderer.hand.visible = v; }
 
   resetWorld(startLog) {
     const all = [];
@@ -96,8 +96,9 @@ export class Game {
     this.world.setBlock(0, 0, 0, startLog ? ID('oak_log') : this.GRASS);
     this.mobs.clear(); this.drops.clear(); this.entities.clear();
     this.inv.clear();
-    this.state = { blocksBroken: 0, forced: makeForcedPlan(), time: 30, spawn: null };
+    this.state = { blocksBroken: 0, forced: makeForcedPlan(), time: 60, spawn: null };
     this.player.reset(0.5, 1, 0.5);
+    this.player.pitch = -1.30; // looking down at the One Block (needs about -73 degrees or steeper to actually reach it)
     this.goals.deserialize({});
     this.regen = null; this.mining = null; this.sel = 0;
     this.growth.scan();
@@ -125,7 +126,10 @@ export class Game {
   }
 
   toTitle() {
-    this.save();
+    if (this.player.dead) { // the death save (taken at the moment of death) is the good state; reload it
+      const d = readSave(); if (d) this.applySave(d);
+      this.player.dead = false;
+    } else this.save();
     this.mode = 'title';
     this.setHandVisible(false);
     this.input.unlock();
@@ -144,11 +148,12 @@ export class Game {
       state: { ...this.state },
       goals: this.goals.serialize(),
       sel: this.sel,
+      drops: this.drops.serialize(),
     };
   }
 
   save() {
-    if (!this.hasWorld || this.player.dead) return false;
+    if (!this.hasWorld || this.player.dead || this.player.y < -30) return false; // never persist a dead / falling player
     try { return writeSave(this.snapshot()); } catch (e) { console.warn('save failed', e); return false; }
   }
 
@@ -157,10 +162,11 @@ export class Game {
     this.world.deserialize(d.world);
     this.inv.deserialize(d.inv);
     this.entities = deserializeEntities(d.entities);
-    this.state = { blocksBroken: 0, forced: makeForcedPlan(), time: 30, spawn: null, ...(d.state || {}) };
+    this.state = { blocksBroken: 0, forced: makeForcedPlan(), time: 60, spawn: null, ...(d.state || {}) };
     this.player.deserialize(d.player);
     this.goals.deserialize(d.goals);
     this.sel = d.sel || 0;
+    this.drops.restore(d.drops);
     this.regen = null;
     this.growth.scan();
     // stale lit furnaces / missing entities are tolerated
@@ -177,8 +183,52 @@ export class Game {
   // ------------------------------------------------------------------ time
   isNight() { const t = this.state.time; return t >= 345 && t < 555; }
   isDay() { const t = this.state.time; return t < 320 || t >= 560; }
-  renderTime() {
-    const s = this.state.time % DAY_LEN;
+
+  /** Walkable surface blocks (cached ~3 s); drives the night-zombie cap. */
+  surfaceCount() {
+    const now = performance.now();
+    if (this._surfT === undefined || now - this._surfT > 3000) { this._surfT = now; this._surf = countSurface(this.world); }
+    return this._surf;
+  }
+
+  inventoryFullHint() {
+    const now = performance.now();
+    if (now - (this._fullT || 0) < 3000) return;
+    this._fullT = now; this.ui.message('Inventory full'); this.sound.play('click');
+  }
+
+  /** Contextual onboarding hint bar + dusk warning. */
+  updateTutorial(dt) {
+    const t = this.state.time;
+    if (t < 300) this.duskWarned = false;
+    else if (t >= 330 && t < 350 && !this.duskWarned) {
+      this.duskWarned = true;
+      this.ui.toast('Night is falling', 'Light torches to keep zombies away', 'Warning');
+      this.sound.play('phase', { pitch: 0.6, vol: 0.5 });
+    }
+    this.tutT = (this.tutT || 0) - dt; if (this.tutT > 0) return; this.tutT = 0.3;
+    const inv = this.inv, gd = this.goals.done, st = this.state, p = this.player;
+    const hasTable = inv.count('crafting_table') > 0;
+    const planks = inv.count('oak_planks') + inv.count('spruce_planks');
+    const logs = inv.count('oak_log') + inv.count('spruce_log');
+    let hint = '';
+    if (hasTable) hint = 'Place the crafting table (Right-Click)';
+    else if (!gd.table) {
+      if (planks + logs === 0) hint = 'Hold Left-Click to break the block';
+      else if (planks >= 4) hint = 'Press E and craft a Crafting Table from planks';
+      else hint = 'Press E to open your inventory and craft planks';
+    } else if (!gd.wpick && !inv.count('wooden_pickaxe')) hint = 'Stand near the table, press E and craft a Wooden Pickaxe';
+    else if (!st.tutSneak) {
+      if (p.sneaking) st.tutSneak = true;
+      else { this.sneakHintT = (this.sneakHintT || 0) + 0.3; if (this.sneakHintT > 12) st.tutSneak = true; hint = 'Hold Shift to sneak – it stops you falling off!'; }
+    } else if (this.goalHintT > 0) {
+      const g = this.goals.next(); if (g) hint = `Goal: ${g.desc}`;
+    }
+    if (this.goalHintT > 0) this.goalHintT -= 0.3;
+    this.ui.setHint(this.ui.current ? '' : hint);
+  }
+  renderTime(sec) {
+    const s = (sec === undefined ? this.state.time : sec) % DAY_LEN;
     let t;
     if (s < 300) t = 0.02 + (s / 300) * 0.40;
     else if (s < 360) t = 0.42 + ((s - 300) / 60) * 0.16;
@@ -226,7 +276,11 @@ export class Game {
     w.setBlock(0, 0, 0, id);
     if (next.chest) this.entities.set(keyOf(0, 0, 0), newChest(rollLoot(idx)));
     this.renderer.spawnParticles('sparkle', 0.5, 1.0, 0.5);
-    if (next.mob) this.mobs.spawn(next.mob, 0.5, 1.05, 0.5);
+    if (next.mob) {
+      // never in the player's column; zombies only with room (>= 12 surface blocks); see spawning.js
+      const plan = planPhaseSpawn(w, this.player, next.mob, this.WATER, Math.random);
+      if (plan) this.mobs.spawn(plan.kind, plan.x, plan.y + 0.05, plan.z);
+    }
     this.regen = null;
   }
 
@@ -246,10 +300,9 @@ export class Game {
 
   updateTitle(dt) {
     this.titleT += dt;
-    this.state.time = (this.state.time + dt * 1.5) % DAY_LEN;
-    // keep the title in bright daylight
-    if (!(this.state.time < 280)) this.state.time = 20;
-    this.renderer.setTimeOfDay(this.renderTime());
+    // the title has its own clock: it must never touch the world clock
+    this.titleClock = ((this.titleClock ?? 60) + dt * 1.5) % 250;
+    this.renderer.setTimeOfDay(this.renderTime(this.titleClock));
     const a = this.titleT * 0.12;
     const cam = this.renderer.camera;
     cam.position.set(0.5 + Math.cos(a) * 7.5, 3.6 + Math.sin(this.titleT * 0.3) * 0.4, 0.5 + Math.sin(a) * 7.5);
@@ -281,6 +334,7 @@ export class Game {
     // One Block regen
     if (this.regen) { this.regen.t -= dt; if (this.regen.t <= 0) this.placeOneBlock(this.regen.next); }
     else if (w.getBlock(0, 0, 0) === 0) this.placeOneBlock(null);
+    this.updateTutorial(dt);
     this.holdAboveOneBlock();
     this.mobs.update(dt);
     this.drops.update(dt);
@@ -419,7 +473,7 @@ export class Game {
     for (const d of drops) this.dropItem(d.key, d.n, x + 0.5, y + 0.5, z + 0.5, d.dur);
     if (byPlayer) {
       if (held && ITEMS[held.key].tool && def.hardness > 0) this.damageHeld(1);
-      this.player.addExhaustion(0.005);
+      this.player.addExhaustion(0.04);
       this.events.emit('break', def.key);
     }
     if (toWater) this.sound.play('splash', { vol: 0.5 });
@@ -518,6 +572,10 @@ export class Game {
         return false;
       }
       if (def.places) return this.placeBlock(hit, def);
+    } else if (def && def.kind === 'block' && edge && p.onGround && p.pitch < 0.25) {
+      // shallow pitch / nothing targeted: bridge from the block under our feet (smart placement picks the facing side)
+      const bx = Math.floor(p.x), by = Math.floor(p.y - 0.1), bz = Math.floor(p.z);
+      if (w.isSolid(bx, by, bz)) return this.placeBlock({ x: bx, y: by, z: bz, id: w.getBlock(bx, by, bz), normal: { x: 0, y: 1, z: 0 } }, def);
     }
     return false;
   }
@@ -577,8 +635,16 @@ export class Game {
     const w = this.world, p = this.player;
     const bkey = def.places; const bdef = BLOCK_BY_KEY[bkey]; if (!bdef) return false;
     const n = hit.normal;
-    const x = hit.x + n.x, y = hit.y + n.y, z = hit.z + n.z;
-    const at = w.getBlock(x, y, z);
+    let x = hit.x + n.x, y = hit.y + n.y, z = hit.z + n.z;
+    let at = w.getBlock(x, y, z);
+    // smart placement: top face blocked by our own body -> same level as the hit block, in the facing direction
+    if (bdef.solid && n.y === 1 && (overlapsCell(p, x, y, z) || this.mobs.overlapsCell(x, y, z))) {
+      const f = p.forward, ax = Math.abs(f.x) >= Math.abs(f.z);
+      const sx = ax ? (Math.sign(f.x) || 1) : 0, sz = ax ? 0 : (Math.sign(f.z) || -1);
+      const nx = hit.x + sx, nz = hit.z + sz, ny = hit.y, nat = w.getBlock(nx, ny, nz);
+      if ((nat === 0 || nat === this.WATER) && !(nx === 0 && ny === 0 && nz === 0)
+        && !overlapsCell(p, nx, ny, nz) && !this.mobs.overlapsCell(nx, ny, nz)) { x = nx; y = ny; z = nz; at = nat; }
+    }
     if (at !== 0 && at !== this.WATER) return false;
     if (x === 0 && y === 0 && z === 0) return false;
     if (y < -32 || y > 95 || x < -64 || x > 63 || z < -64 || z > 63) return false;

@@ -163,9 +163,7 @@ export class Window {
     list.innerHTML = '';
     const ok = this.tableOk();
     const items = RECIPES.map((r) => ({ r, miss: missingFor(r, this.inv) }));
-    const sortKey = (x) => (Object.keys(x.miss).length === 0 && (!x.r.table || ok) ? 0 : x.r.table && !ok ? 2 : 1);
-    items.sort((a, b) => sortKey(a) - sortKey(b) || a.r.id - b.r.id);
-    let lastCat = '';
+    // stable order (fixed recipe order): only the bright/dim styling changes, never row positions
     for (const { r, miss } of items) {
       const craftable = Object.keys(miss).length === 0 && (!r.table || ok);
       if (this.filter === 'can' && !craftable) continue;
@@ -233,8 +231,10 @@ export class Window {
         if (as.length) { as[0].set({ ...s }); slot.set(null); return; }
       }
       if (this.type === 'chest') targets = this.group('chest');
-      else if (this.type === 'furnace') targets = SMELTING[s.key] ? [this.fIn] : def.fuel ? [this.fFuel] : [];
-      else targets = [];
+      else if (this.type === 'furnace') {
+        const fi = this.fIn.get();
+        targets = SMELTING[s.key] && (!fi || fi.key === s.key) ? [this.fIn] : def.fuel ? [this.fFuel] : SMELTING[s.key] ? [this.fIn] : [];
+      } else targets = [];
       if (!targets.length) targets = g === 'hotbar' ? this.group('main') : this.group('hotbar');
     } else targets = [...this.group('hotbar'), ...this.group('main')];
     const copy = { ...s };

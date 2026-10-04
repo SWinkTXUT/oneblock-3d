@@ -8,7 +8,7 @@ import { heartIcon, foodIcon, armorIcon, sunIcon, moonIcon, trophyIcon } from '.
 import { Window } from './Windows.js';
 
 const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
-const PAUSING = new Set(['pause', 'settings', 'confirm']);
+const PAUSING = new Set(['pause', 'settings', 'confirm', 'goals']);
 
 export class UI {
   constructor(game) {
@@ -50,12 +50,14 @@ export class UI {
     this.phName = el('div', 'phname', ph); this.phSub = el('div', 'phsub', ph);
     const bar = el('div', 'bar', ph); this.phFill = el('i', '', bar);
     this.phInfo = el('div', 'phinfo', ph);
+    this.tracker = el('div', 'tracker', ph);
     // clock
     const ck = this.clock = el('div', 'panel clock', h);
     this.clockIcon = el('img', '', ck); this.clockLbl = el('span', '', ck);
     this.toasts = el('div', 'toasts', h);
     this.banner_ = el('div', 'banner', h); this.bannerT = el('h1', '', this.banner_); this.bannerS = el('p', '', this.banner_);
     this.msg = el('div', 'actionmsg', h);
+    this.hintEl = el('div', 'hintbar', h);
     this.vignette = el('div', 'vignette', h);
     this.water = null;
     // stats + hotbar
@@ -120,6 +122,9 @@ export class UI {
       this.phInfo.innerHTML = `Blocks broken: <b>${g.state.blocksBroken}</b><br>${info.toNext} more to ${info.nextName}`;
       this.phasePanel.dataset.phase = info.phase.key;
     }
+    // goal tracker
+    const ng = g.goals.next(), tsig = ng ? ng.id : 'done';
+    if (tsig !== c.goal) { c.goal = tsig; this.tracker.innerHTML = ng ? `<i>\u25B8</i> <b>${ng.name}</b><span>${ng.desc}</span>` : '<i>\u2605</i> <b>All goals complete!</b>'; }
     // clock
     const t = g.state.time, label = t < 300 ? 'Day' : t < 345 ? 'Dusk' : t < 555 ? 'Night' : t < 575 ? 'Dawn' : 'Day';
     const night = label === 'Night' || label === 'Dusk';
@@ -127,15 +132,26 @@ export class UI {
     this.clockLbl.dataset.t = Math.floor(t / 60);
   }
 
+  /** Tutorial hint bar (bottom centre). Fades out, swaps text, fades in. */
+  setHint(text) {
+    if (text === this.hintText) return;
+    this.hintText = text;
+    const e = this.hintEl;
+    e.classList.remove('show');
+    clearTimeout(this.hintT);
+    if (!text) return;
+    this.hintT = setTimeout(() => { e.textContent = text; e.classList.add('show'); }, 250);
+  }
+
   damage() {
     const v = this.vignette; v.classList.remove('hit'); void v.offsetWidth; v.classList.add('hit');
   }
 
-  toast(title, desc) {
+  toast(title, desc, kicker = 'Goal reached!') {
     const t = el('div', 'toast', this.toasts);
     const ic = el('img', '', t); ic.src = trophyIcon();
     const b = el('div', '', t);
-    el('small', '', b).textContent = 'Goal reached!';
+    el('small', '', b).textContent = kicker;
     el('strong', '', b).textContent = title;
     el('span', '', b).textContent = desc;
     setTimeout(() => t.classList.add('out'), 4200);
@@ -325,7 +341,7 @@ export class UI {
     el('h1', '', p).textContent = 'You died!';
     el('p', 'cause', p).textContent = cause || 'You died';
     this.btn(p, 'Respawn', () => this.game.respawn());
-    this.btn(p, 'Save & Quit to Title', () => { this.game.player.dead = false; this.game.toTitle(); });
+    this.btn(p, 'Save & Quit to Title', () => { this.game.toTitle(); });
     this.setScreen(p, 'dim center deathscreen');
   }
 
@@ -363,10 +379,9 @@ export class UI {
     const m = el('div', 'titlemenu', t);
     const has = g.hasSave();
     this.btn(m, has ? 'Continue' : 'Play', () => { t.classList.add('hidden'); g.startPlaying(); }, 'primary');
-    this.btn(m, has ? 'New World' : 'Play (new world)', () => {
+    if (has) this.btn(m, 'New World', () => {
       const go = () => { t.classList.add('hidden'); g.newWorld(); g.startPlaying(); };
-      if (has) { t.classList.add('hidden'); this.confirm('Start a new world? Your saved world will be erased.', go); }
-      else go();
+      t.classList.add('hidden'); this.confirm('Start a new world? Your saved world will be erased.', go);
     });
     this.btn(m, 'Settings', () => { this.returnTo = 'title'; t.classList.add('hidden'); this.current = null; this.open('settings'); });
     const hint = el('div', 'controls', t);

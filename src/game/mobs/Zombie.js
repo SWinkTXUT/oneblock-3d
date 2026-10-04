@@ -5,7 +5,7 @@ export class Zombie extends Mob {
   constructor(game, x, y, z) {
     super(game, 'zombie', x, y, z, buildZombie(), { hw: 0.3, h: 1.95, hp: 20 });
     this.hurtSound = 'zombie_hurt'; this.deathSound = 'zombie_death';
-    this.atkCd = 0; this.state = 'idle'; this.stateT = 1; this.burnTick = 0; this.jitter = Math.random() * 0.4;
+    this.rise = 1.5; this.atkCd = 1.5; this.state = 'idle'; this.stateT = 1; this.burnTick = 0; this.jitter = Math.random() * 0.4;
   }
 
   onDeath() {
@@ -21,6 +21,13 @@ export class Zombie extends Mob {
     const g = this.game, p = g.player, w = g.world;
     this.atkCd -= dt;
     this.soundT -= dt;
+    if (this.rise > 0) { // rising from the ground: harmless and stationary
+      this.rise -= dt; this.speed = 0; this.atkCd = Math.max(this.atkCd, 0.3);
+      this.yOff = -this.h * Math.max(0, this.rise / 1.5) ** 1.5;
+      if (Math.random() < dt * 14) g.renderer.spawnParticles('poof', this.x + (Math.random() - 0.5) * 0.6, this.y + 0.1, this.z + (Math.random() - 0.5) * 0.6);
+      if (this.rise <= 0) this.yOff = 0;
+      return;
+    }
     const dx = p.x - this.x, dz = p.z - this.z, dy = p.y - this.y;
     const flat = Math.hypot(dx, dz);
     const near = !p.dead && flat < 16 && Math.abs(dy) < 12;

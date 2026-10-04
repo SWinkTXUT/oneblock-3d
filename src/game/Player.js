@@ -6,6 +6,7 @@ import { armorReduction } from './rules.js';
 
 const WATER = BLOCK_BY_KEY.water.id;
 export const EYE = 1.62;
+export const KNOCK = 0.35;
 const WALK = 4.3, SPRINT = 5.6, SNEAK = 1.3, GRAVITY = 32, JUMP = 9;
 
 export class Player {
@@ -25,7 +26,7 @@ export class Player {
     this.attackCd = 0; this.poison = 0;
     this.dead = false; this.deathCause = '';
     this.walkDist = 0; this.eyeOff = 0;
-    this.lastW = 0; this.sprintTap = 0; this.hover = false;
+    this.lastW = 0; this.sprintTap = 0; this.hover = false; this.kb = null;
   }
 
   get eye() { return { x: this.x, y: this.y + EYE - this.eyeOff, z: this.z }; }
@@ -82,6 +83,10 @@ export class Player {
       const b = world.getCollisionBoxes(e.x - this.hw, e.y - 0.5, e.z - this.hw, e.x + this.hw, e.y - 0.05, e.z + this.hw);
       return b.length > 0;
     } : null;
+    if (this.kb) { // knockback is a capped displacement (<= 0.35 blocks) that respects the sneak edge guard
+      moveEntity(world, this, this.kb.x, 0, this.kb.z, guard);
+      this.kb = null;
+    }
 
     const px = this.x, pz = this.z, py = this.y;
     const r = moveEntity(world, this, this.vx * dt, this.vy * dt, this.vz * dt, guard);
@@ -108,7 +113,7 @@ export class Player {
       this.walkDist += dist;
       const stride = this.sprinting ? 2.0 : this.sneaking ? 2.4 : 1.7;
       if (this.walkDist > stride) { this.walkDist = 0; ev.step && ev.step(); }
-      if (this.sprinting) this.addExhaustion(dist * 0.1);
+      this.addExhaustion(dist * (this.sprinting ? 0.1 : 0.02));
     }
     this.eyeOff += ((this.sneaking ? 0.22 : 0) - this.eyeOff) * (1 - Math.exp(-14 * dt));
 
@@ -159,8 +164,11 @@ export class Player {
     this.health -= amount;
     this.invuln = opts.force ? this.invuln : 0.5;
     if (opts.from && !opts.noKnock) {
-      const dx = this.x - opts.from.x, dz = this.z - opts.from.z, l = Math.hypot(dx, dz) || 1;
-      this.vx += (dx / l) * 6; this.vz += (dz / l) * 6; this.vy = Math.max(this.vy, 4.5);
+      let dx = this.x - opts.from.x, dz = this.z - opts.from.z;
+      const l = Math.hypot(dx, dz);
+      if (l < 1e-3) { dx = 1; dz = 0; } // directly on top: any direction, still capped
+      const n = Math.hypot(dx, dz);
+      this.kb = { x: (dx / n) * KNOCK, z: (dz / n) * KNOCK };
     }
     ev.hurt && ev.hurt(amount, cause);
     if (this.health <= 0) { this.health = 0; this.kill(cause, ev); }

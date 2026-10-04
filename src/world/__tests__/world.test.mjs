@@ -26,7 +26,9 @@ h = w.raycast({x:5,y:0.5,z:0.5},{x:-1,y:0,z:0},10); // passes through water at x
 assert.deepEqual([h.x,h.normal.x], [0,1]);
 assert.equal(w.raycast({x:0.5,y:3,z:0.5},{x:0,y:1,z:0},10), null);
 assert.equal(w.raycast({x:0.5,y:3,z:0.5},{x:0,y:-1,z:0},1), null);
-h = w.raycast({x:0.5,y:0.5,z:0.5},{x:0,y:-1,z:0},5); assert.equal(h.dist,0);
+h = w.raycast({x:0.5,y:0.5,z:0.5},{x:0,y:-1,z:0},5); assert.equal(h, null); // inside the block: own cell ignored
+w.setBlock(0,1,0,6); h = w.raycast({x:0.5,y:0.5,z:0.5},{x:0,y:1,z:0},5); assert.deepEqual([h.y,h.normal.y], [1,-1]); w.setBlock(0,1,0,0);
+const wb = new World(); wb.deserialize({v:1,chunks:[[0,0,0,[250,4096]]]}); assert.equal(wb.countBlocks(),0);
 // torches hittable
 w.setBlock(4,0,0,19); h = w.raycast({x:4.5,y:3,z:0.5},{x:0,y:-1,z:0},5); assert.equal(h.id,19);
 // collision
