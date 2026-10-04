@@ -79,12 +79,13 @@ export class Player {
       this.addExhaustion(this.sprinting ? 0.2 : 0.05);
     }
 
-    const guard = this.sneaking && this.onGround ? (e) => {
+    const ledge = (e) => {
       const b = world.getCollisionBoxes(e.x - this.hw, e.y - 0.5, e.z - this.hw, e.x + this.hw, e.y - 0.05, e.z + this.hw);
       return b.length > 0;
-    } : null;
-    if (this.kb) { // knockback is a capped displacement (<= 0.35 blocks) that respects the sneak edge guard
-      moveEntity(world, this, this.kb.x, 0, this.kb.z, guard);
+    };
+    const guard = this.sneaking && this.onGround ? ledge : null;
+    if (this.kb) { // knockback is a capped displacement (<= 0.35 blocks); on the ground it never pushes you off a ledge into the void
+      moveEntity(world, this, this.kb.x, 0, this.kb.z, this.onGround ? ledge : guard);
       this.kb = null;
     }
 
