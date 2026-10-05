@@ -200,6 +200,16 @@ export class Renderer {
     this.scene.add(this.highlight);
     this.highlightPos = null;
 
+    // permanent thin white outline marking the One Block at (0,0,0)
+    this.oneBlockLineMat = new LineMaterial({ color: 0xffffff, linewidth: 1.6, transparent: true, opacity: 0.9, depthTest: true, toneMapped: false });
+    this.oneBlockLineMat.resolution.set(w, h);
+    this.oneBlockOutline = new LineSegments2(lg, this.oneBlockLineMat);
+    this.oneBlockOutline.position.set(0.5, 0.5, 0.5);
+    this.oneBlockOutline.scale.setScalar(1.012); // just outside the faces (and the 1.006 aim highlight) to avoid z-fighting
+    this.oneBlockOutline.renderOrder = 4;
+    this.oneBlockOutline.frustumCulled = false;
+    this.scene.add(this.oneBlockOutline);
+
     // crack overlay
     const crack = getCrackTexture().clone();
     crack.needsUpdate = true;
@@ -304,6 +314,7 @@ export class Renderer {
     this.composer.setPixelRatio(this.pixelRatio);
     this.composer.setSize(w, h);
     this.lineMat.resolution.set(w, h);
+    this.oneBlockLineMat.resolution.set(w, h);
     this._updateScale();
   }
 
