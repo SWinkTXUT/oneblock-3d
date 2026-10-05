@@ -318,7 +318,7 @@ export class Game {
     if (!frozen) {
       this.state.time = (this.state.time + dt) % DAY_LEN;
       const active = inp.locked && !ui.current && !this.sleeping && !p.dead;
-      if (this.sleeping > 0) this.sleeping -= dt;
+      if (this.sleeping > 0) this.sleeping = Math.max(0, this.sleeping - dt); // clamp: a negative remainder is truthy and froze the player
       p.update(dt, active ? inp.moveInput() : { f: 0, r: 0, jump: false, sneak: false, sprint: false }, this.world, this.pev);
       if (active) this.updateInteraction(dt);
       else { this.renderer.setHighlight(null); this.renderer.setBreakProgress(null, 0); this.mining = null; this.eatT = 0; }
