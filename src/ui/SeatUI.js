@@ -5,6 +5,7 @@ import { GOALS } from '../game/Goals.js';
 import { heartIcon, foodIcon, armorIcon } from './pixelicons.js';
 import { Window } from './Windows.js';
 import { MenuNav, readUi } from './focus.js';
+import { padGlyphHtml } from '../input/glyphs.js';
 
 const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
 const WINDOWS = new Set(['inventory', 'furnace', 'chest']);
@@ -48,7 +49,8 @@ export class SeatUI {
     e.classList.remove('show');
     clearTimeout(this.hintT);
     if (!text) return;
-    this.hintT = setTimeout(() => { e.textContent = text; e.classList.add('show'); }, 250);
+    const pad = this.seat.input && this.seat.input.kind === 'gamepad';
+    this.hintT = setTimeout(() => { if (pad) e.innerHTML = padGlyphHtml(text); else e.textContent = text; e.classList.add('show'); }, 250);
   }
 
   // ------------------------------------------------------------------ HUD
