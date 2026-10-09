@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OneBlock 3D — Engine Demo</title>
+<style>:root{--lightningcss-light: ;--lightningcss-dark:initial;color-scheme:dark}html,body{color:#e8eefc;background:#0b0f1a;height:100%;margin:0;font:13px/1.35 ui-monospace,SF Mono,Menlo,Consolas,monospace;overflow:hidden}#view{position:fixed;inset:0}#panel{-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);-webkit-user-select:none;user-select:none;z-index:5;background:#0e1220b8;border:1px solid #a0beff2e;border-radius:12px;width:258px;padding:12px 14px;position:fixed;top:12px;left:12px;box-shadow:0 8px 30px #00000059}#panel h1{letter-spacing:.08em;text-transform:uppercase;color:#9db8ff;margin:0 0 8px;font-size:13px}#panel label{color:#b9c6e8;justify-content:space-between;align-items:center;gap:8px;margin:7px 0 3px;display:flex}#panel input[type=range]{accent-color:#7aa2ff;width:100%}#panel select,#panel button{color:#e8eefc;width:100%;font:inherit;background:#1a2240;border:1px solid #34406d;border-radius:7px;padding:5px 7px}#panel button{cursor:pointer;margin-top:6px}#panel button:hover{background:#243060}.row{gap:6px;display:flex}#fps{z-index:5;text-align:right;white-space:pre;background:#0e1220b8;border:1px solid #a0beff2e;border-radius:9px;padding:7px 11px;position:fixed;top:12px;right:12px}#hint{color:#b9c6e8;z-index:5;pointer-events:none;text-align:center;background:#0e1220b3;border-radius:9px;padding:6px 12px;transition:opacity .4s;position:fixed;bottom:86px;left:50%;transform:translate(-50%)}#cross{z-index:4;pointer-events:none;mix-blend-mode:difference;opacity:.9;width:14px;height:14px;margin:-7px 0 0 -7px;display:none;position:fixed;top:50%;left:50%}#cross:before,#cross:after{content:"";background:#fff;position:absolute}#cross:before{width:2px;height:14px;top:0;left:6px}#cross:after{width:14px;height:2px;top:6px;left:0}#icons{z-index:5;background:linear-gradient(#0000,#080a14d1 40%);flex-wrap:wrap;justify-content:center;gap:2px;max-height:108px;padding:8px 10px;display:flex;position:fixed;bottom:0;left:0;right:0;overflow-y:auto}#icons img{width:36px;height:36px;image-rendering:pixelated;background:#ffffff0a;border-radius:6px;padding:2px}#icons img:hover{background:#7aa2ff59}#icons img.sel{outline:2px solid #7aa2ff}</style>
+  <script type="module" crossorigin src="./assets/demo-ItAutLyE.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/InputHub-CN8q19v1.js">
+</head>
+<body>
+<div id="view"></div>
+<div id="cross"></div>
+<div id="panel">
+  <h1>OneBlock 3D · engine demo</h1>
+  <label>Time of day <span id="tlabel">0.28</span></label>
+  <input id="time" type="range" min="0" max="0.9999" step="0.001" value="0.28" />
+  <label><span>Auto-advance</span> <input id="play" type="checkbox" /></label>
+  <label>Phase ambience</label>
+  <select id="phase">
+    <option value="plains">1 · Plains</option>
+    <option value="underground">2 · Underground</option>
+    <option value="snow">3 · Snowy Peaks</option>
+    <option value="desert">4 · Sunlit Dunes</option>
+    <option value="caverns">5 · Deep Caverns</option>
+    <option value="ember">6 · Ember Wastes</option>
+    <option value="skylands">7 · The Skylands</option>
+  </select>
+  <label>Quality</label>
+  <select id="quality"><option value="high">High (shadows + bloom)</option><option value="low">Low</option></select>
+  <label>Held item (viewmodel)</label>
+  <select id="held"><option value="">(empty hand)</option></select>
+  <div class="row"><button id="swing">Swing</button><button id="hurt">Hurt flash</button></div>
+  <div class="row"><button id="uw">Underwater</button><button id="stress">+3000 blocks</button></div>
+  <label>Split screen views / platform</label>
+  <div class="row"><select id="views"><option>1</option><option>2</option><option>3</option><option>4</option></select><select id="platform"><option value="computer">computer</option><option value="xbox">xbox</option><option value="ipad">ipad</option></select></div>
+  <div id="pads" style="margin-top:6px;color:#9db8ff;font-size:11px">no pads</div>
+  <div class="row"><button id="fx">Particles</button><button id="home">Reset cam</button></div>
+</div>
+<div id="fps">-- fps</div>
+<div id="hint">Click the view to fly · WASD move · Space / Shift up / down · Ctrl fast · LMB break · RMB place held block · Esc release</div>
+<div id="icons"></div>
+</body>
+</html>
