@@ -113,3 +113,14 @@ WASD move, mouse look, LMB hold break/attack, RMB use/place/eat (hold), Shift sn
 ## Critic findings
 
 _(none yet)_
+
+---
+# Platforms round (SPEC-PLATFORMS.md)
+
+## Builder A — Engine, Views & Input
+
+_(not started)_
+
+## Builder B — Game, UI & Pages
+
+_(not started)_
