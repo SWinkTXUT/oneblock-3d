@@ -9,7 +9,12 @@ if (platform.safeArea) root.style.setProperty('--safe-pad', `${platform.safeArea
 
 if (platform.key === 'ipad') { // no page zoom / scroll / bounce on iPad Safari
   for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault());
-  document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+  // only the game surface is non-scrollable; lists (recipe book, goals, menus, sliders) scroll by finger
+  document.addEventListener('touchmove', (e) => {
+    const t = e.target;
+    if (t && t.closest && t.closest('.booklist, .goallist, .menu, input[type=range]')) return;
+    e.preventDefault();
+  }, { passive: false });
 }
 if (platform.key === 'xbox') { // B / Back must never leave the page; the controller is not a mouse
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape' || e.key === 'BrowserBack' || e.code === 'GamepadB') e.preventDefault(); }, true);

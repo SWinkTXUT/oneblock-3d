@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { Player } from '../Player.js';
 import { Inventory, makeStack } from '../Inventory.js';
-import { nearestSeat, sleepStatus, pickupSeat, seatSaveData, livingSeats } from '../team.js';
+import { nearestSeat, sleepStatus, pickupSeat, seatSaveData, livingSeats, joinOptions, slotSummary } from '../team.js';
 import { encode, decode, migrate } from '../Save.js';
 import { PLATFORMS, viewportRects } from '../../platform.js';
 
@@ -110,6 +110,29 @@ t('dropped items go to the nearest seat with room', () => {
 t('platform contract sanity: seat counts and layouts', () => {
   assert.equal(PLATFORMS.xbox.maxSeats, 4); assert.equal(PLATFORMS.computer.saveKey, 'oneblock3d.save.v1');
   for (let n = 1; n <= 4; n++) assert.equal(viewportRects(n).length, n);
+});
+
+t('disconnected / ghost seats never count as living (sleep, targeting, pickup)', () => {
+  const a = mkSeat(0, 0.5), b = mkSeat(1, 2.5);
+  a.inBed = {}; b.disconnected = true; // P2's controller died
+  assert.deepEqual(sleepStatus([a, b]), { total: 1, sleeping: 1, all: true }); // night still skips
+  assert.equal(nearestSeat([a, b], 2.5, 1, 0.5), a);                            // zombies ignore the frozen seat
+  assert.equal(pickupSeat([a, b], { key: 'dirt', x: 2.5, y: 1, z: 0.5 }), null);
+  b.disconnected = false; assert.equal(sleepStatus([a, b]).all, false);
+});
+
+t('join options: identity match preferred, picker only when saved slots are free', () => {
+  const slot = (i, active, hasData, padId) => ({ index: i, active, hasData, padId, inv: new Inventory() });
+  const slots = [slot(0, true, true, null), slot(1, false, true, { id: 'Xbox Controller', index: 2 }), slot(2, false, true, { id: 'Xbox Controller', index: 3 }), slot(3, false, false, null)];
+  let o = joinOptions(slots, { id: 'Xbox Controller', index: 3 });
+  assert.deepEqual(o.options, [1, 2, 3]); assert.equal(o.preferred, 2); assert.equal(o.needsPick, true);
+  o = joinOptions(slots, { id: 'Xbox Controller', index: 9 }); assert.equal(o.preferred, 1);   // no match -> lowest free
+  const fresh = [slot(0, true, true), slot(1, false, false), slot(2, false, false)];
+  assert.equal(joinOptions(fresh, { id: 'x', index: 1 }).needsPick, false);                     // nothing saved -> just join
+  assert.equal(joinOptions([slot(0, true, true), slot(1, false, true)], null).needsPick, false); // one free slot -> no choice to make
+  assert.equal(joinOptions([slot(0, true, true)], null).preferred, -1);
+  const sl = slot(2, false, true); sl.inv.add('oak_planks', 23); sl.inv.add('diamond', 3); sl.inv.add('torch', 1); sl.inv.add('coal', 9);
+  assert.equal(slotSummary(sl), '23 Oak Planks, 9 Coal, 3 Diamond'); assert.equal(slotSummary(slot(0, false, true)), 'New player');
 });
 
 console.log(`\n${pass} multiseat tests passed`);

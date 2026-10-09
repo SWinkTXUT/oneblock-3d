@@ -304,3 +304,76 @@ body[data-platform="xbox"] .winclose { display: none; }
 body[data-platform="ipad"] .winclose { width: 48px; height: 48px; top: -18px; right: -18px; font-size: 20px; }
 
 .lobbynote { max-width: 640px; text-align: center; font-size: 12px; line-height: 1.7; color: var(--gold); text-shadow: 0 1px 0 #000; min-height: 20px; }
+
+/* =====================  Round 4  ===================== */
+#ui > .screen { z-index: 20; }
+#ui.paused .hintbar { opacity: 0 !important; }
+body[data-platform="computer"] .winclose { display: none; }
+.bookhead { flex-wrap: wrap; gap: 6px; }
+.touchtip { display: none; position: absolute; left: 0; right: 0; bottom: -46px; text-align: center; font-size: 12px; line-height: 1.5; color: var(--gold); text-shadow: 0 1px 0 #000; pointer-events: none; }
+.switchdev { position: absolute; right: 18px; bottom: 18px; color: var(--dim); font-size: 11px; text-decoration: underline; pointer-events: auto; }
+body[data-platform="xbox"] .switchdev { display: none; }
+.seathud.disc .hintbar, .seathud.disc .bottom, .seathud.disc .crosshair { display: none; }
+.seathud.multi .hintbar { bottom: auto; top: 44px; }
+
+/* shared panels for the TV */
+.padhelp { position: fixed; top: 1.5%; left: 50%; transform: translateX(-50%); z-index: 90; max-width: 80vw; padding: 10px 24px; text-align: center; background: rgba(18,14,26,.94); border: 3px solid var(--gold); border-radius: 10px; box-shadow: 0 10px 34px rgba(0,0,0,.6); pointer-events: none; }
+.padhelp strong { display: block; font-family: var(--font-hd); font-weight: 400; font-size: 16px; color: var(--gold); margin-bottom: 6px; }
+.padhelp span { font-size: 20px; line-height: 1.5; color: #fff; }
+.fshint { position: fixed; right: 5%; bottom: 3%; z-index: 90; padding: 8px 14px; font-size: 16px; color: #fff; background: rgba(18,14,26,.85); border: 2px solid var(--panel-edge); border-radius: 6px; pointer-events: none; }
+.pickers { position: fixed; inset: 0; z-index: 95; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; background: rgba(6,4,12,.6); pointer-events: none; }
+.picker { padding: 18px 22px; text-align: center; }
+.picker h3 { margin: 0 0 14px; font-family: var(--font-hd); font-weight: 400; font-size: 16px; color: var(--gold); }
+.picker p { margin: 14px 0 0; font-size: 16px; color: var(--dim); }
+.pickrow { display: flex; gap: 12px; justify-content: center; }
+.pickcard { width: 200px; padding: 12px 10px; border: 3px solid var(--seat); border-radius: 8px; background: rgba(0,0,0,.35); opacity: .6; }
+.pickcard.sel { opacity: 1; background: color-mix(in srgb, var(--seat) 25%, #120e1a); transform: translateY(-4px); box-shadow: 0 0 0 3px #fff; }
+.pickcard b { display: block; font-family: var(--font-hd); font-weight: 400; font-size: 18px; color: var(--seat); margin-bottom: 8px; }
+.pickcard span { font-size: 14px; line-height: 1.4; color: #fff; }
+
+/* ---------- Xbox: readable from the couch (about 22px at 1-2 seats, about 18px in quadrants) ---------- */
+body[data-platform="xbox"] .hintbar { font-size: 17px; padding: 9px 16px; max-width: 86%; white-space: normal; line-height: 1.5; }
+body[data-platform="xbox"] .namechip { font-size: 16px; padding: 3px 10px; }
+body[data-platform="xbox"] .hbnum { font-size: 12px; }
+body[data-platform="xbox"] .scount { font-size: 15px; }
+body[data-platform="xbox"] .heldname { font-size: 16px; height: 20px; }
+body[data-platform="xbox"] .actionmsg { font-size: 17px; }
+body[data-platform="xbox"] .seatoverlay strong { font-size: 16px; } body[data-platform="xbox"] .seatoverlay span { font-size: 15px; }
+body[data-platform="xbox"] .ghud .phase { width: 330px; }
+body[data-platform="xbox"] .phname { font-size: 18px; } body[data-platform="xbox"] .phsub { font-size: 15px; }
+body[data-platform="xbox"] .phinfo, body[data-platform="xbox"] .tracker { font-size: 17px; }
+body[data-platform="xbox"] .tracker span { font-size: 13px; }
+body[data-platform="xbox"] .clock { font-size: 18px; }
+body[data-platform="xbox"] #ui.multi .ghud .phase { width: 460px; padding: 7px 12px 8px; }
+body[data-platform="xbox"] #ui.multi .ghud .phase .phinfo { font-size: 17px; } body[data-platform="xbox"] #ui.multi .ghud .phase .phinfo br { display: none; }
+body[data-platform="xbox"] #ui.multi .ghud .phase .tracker { font-size: 16px; }
+body[data-platform="xbox"] .toasts { zoom: 1.35; } body[data-platform="xbox"] .banner h1 { font-size: clamp(30px, 4vw, 52px); } body[data-platform="xbox"] .banner p { font-size: 20px; }
+body[data-platform="xbox"] .logo, body[data-platform="xbox"] .titlemenu, body[data-platform="xbox"] .seatcards, body[data-platform="xbox"] .controls { zoom: var(--ui-scale); }
+body[data-platform="xbox"] .controls { font-size: 12px; max-width: 66%; left: 17%; right: auto; }
+body[data-platform="xbox"] #ui > .screen .panel { zoom: var(--ui-scale); }
+body[data-platform="xbox"] .seatcard span { font-size: 13px; }
+/* windows inside a seat rect */
+body[data-platform="xbox"] .window h2 { font-size: 13px; } body[data-platform="xbox"] .window h3 { font-size: 13px; }
+body[data-platform="xbox"] .rname { font-size: 15px; } body[data-platform="xbox"] .ing { font-size: 13px; } body[data-platform="xbox"] .ing img { width: 18px; height: 18px; }
+body[data-platform="xbox"] .chip { font-size: 13px; padding: 4px 12px; }
+body[data-platform="xbox"] .defense { font-size: 15px; } body[data-platform="xbox"] .herotxt { font-size: 12px; max-width: 170px; }
+body[data-platform="xbox"] .tooltip .tn { font-size: 16px; } body[data-platform="xbox"] .tooltip .td { font-size: 13px; }
+body[data-platform="xbox"] .goal strong { font-size: 15px; } body[data-platform="xbox"] .goal span { font-size: 13px; }
+body[data-platform="xbox"] .setrow { font-size: 15px; }
+
+/* ---------- iPad ---------- */
+body[data-platform="ipad"] .booklist, body[data-platform="ipad"] .goallist, .booklist, .goallist { touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+body[data-platform="ipad"] .screen .menu { touch-action: pan-y; overscroll-behavior: contain; }
+body[data-platform="ipad"] #ui.winopen .ghud .phase, body[data-platform="ipad"] #ui.winopen .ghud .clock { display: none; }
+body[data-platform="ipad"] .touchtip.first { display: block; }
+body[data-platform="ipad"] .bottom { bottom: max(12px, env(safe-area-inset-bottom)); }
+body[data-platform="ipad"] .controls { font-size: 16px; line-height: 2; }
+body[data-platform="ipad"] input[type=range] { width: 260px; height: 44px; background: transparent; border: none; touch-action: pan-x; }
+body[data-platform="ipad"] input[type=range]::-webkit-slider-runnable-track { height: 14px; background: rgba(0,0,0,.6); border: 2px solid #000; border-radius: 8px; }
+body[data-platform="ipad"] input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 40px; height: 40px; margin-top: -15px; border-radius: 50%; background: linear-gradient(#e8e4f4, #9a94b0); border: 2px solid #000; }
+body[data-platform="ipad"] .setrow { font-size: 15px; min-height: 52px; }
+body[data-platform="ipad"] .slwrap b { width: 64px; font-size: 14px; }
+@media (orientation: portrait) { body[data-platform="ipad"]::after { font-size: 22px; line-height: 1.8; text-align: center; padding: 30px; content: '\21BB  Rotate your iPad to landscape'; } }
+
+body[data-platform="xbox"] #ui[data-seats="1"] .ghud .phase, body[data-platform="xbox"] #ui[data-seats="2"] .ghud .phase { zoom: 1.28; }
+body[data-platform="xbox"] #ui[data-seats="1"] .ghud .clock { zoom: 1.2; }

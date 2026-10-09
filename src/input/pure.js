@@ -55,3 +55,14 @@ export class EdgeSet {
   clear() { this.m.clear(); }
   age(dt) { for (const [k, v] of this.m) { if (v - dt <= 0) this.m.delete(k); else this.m.set(k, v - dt); } }
 }
+
+/** Joystick sprint: engages only after the push stays >= `enter` (0.95) for `hold` seconds; releases below `exit`. */
+export class SprintLatch {
+  constructor(enter = 0.95, hold = 0.25, exit = 0.5) { this.enter = enter; this.hold = hold; this.exit = exit; this.t = 0; this.on = false; }
+  update(dt, mag) {
+    if (mag >= this.enter) { this.t += dt; if (this.t >= this.hold) this.on = true; }
+    else { this.t = 0; if (mag < this.exit) this.on = false; }
+    return this.on;
+  }
+  reset() { this.t = 0; this.on = false; }
+}

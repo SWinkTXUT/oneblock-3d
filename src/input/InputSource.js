@@ -28,6 +28,8 @@ export class InputSource {
   down(action) { return this.mode === 'play' && this.held.has(action); }
   pressed(action) { return this.edges.take(action); }
   glyph(action) { return action; }
+  /** HTML badge(s) for the glyph: <span class="btn-glyph btn-a">A</span>. Classes: btn-a/b/x/y, btn-bumper, btn-trigger, btn-stick, btn-menu, btn-dpad, btn-key. */
+  glyphHtml(action) { return String(this.glyph(action)).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
   rumble() {}
   touchActive() { this.lastActive = performance.now(); }
 }
@@ -54,6 +56,7 @@ export class CombinedSource extends InputSource {
   }
   down(action) { return this.parts.some((p) => p.down(action)); }
   pressed(action) { let r = false; for (const p of this.parts) if (p.pressed(action)) r = true; return r; }
+  glyphHtml(action) { return (this.parts[1].lastActive > this.parts[0].lastActive ? this.parts[1] : this.parts[0]).glyphHtml(action); }
   glyph(action) { return (this.parts[1].lastActive > this.parts[0].lastActive ? this.parts[1] : this.parts[0]).glyph(action); }
   rumble(i, ms) { for (const p of this.parts) p.rumble(i, ms); }
 }

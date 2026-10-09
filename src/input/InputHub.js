@@ -3,6 +3,7 @@ import { KbmSource } from './KbmSource.js';
 import { GamepadSource } from './GamepadSource.js';
 import { TouchSource } from './TouchSource.js';
 import { CombinedSource } from './InputSource.js';
+import { injectGlyphStyles } from './glyphs.js';
 
 const isStandard = (p) => p && (p.mapping === 'standard' || (p.buttons && p.buttons.length >= 16 && p.axes && p.axes.length >= 4));
 
@@ -16,12 +17,16 @@ export class InputHub {
     this.onPointerLockError = onPointerLockError;
     this.pointerLocked = false;
     this.lockOnClick = true;   // KbmSource click-to-lock; the game may switch this off while a menu is open
-    this.joinOnA = false;      // lobby screens: let A (not just Menu) count as a join press
+    this.joinOnA = false;      // A counts as a join press too (always on for Xbox: Menu may be swallowed by Edge's own menu); View always joins
     this.padSources = new Map(); // gamepad index -> GamepadSource (kept after disconnect so a seat can get its pad back)
     this.disconnectCbs = []; this.connectCbs = [];
     this.keyboardMouse = null; this.touch = null;
     this.xbox = this.platform.key === 'xbox' || (typeof navigator !== 'undefined' && /Xbox/i.test(navigator.userAgent || ''));
 
+    this.joinOnA = this.xbox;
+    this.lastPointerAt = 0;
+    this.startedAt = typeof performance !== 'undefined' ? performance.now() : 0;
+    if (typeof document !== 'undefined') injectGlyphStyles();
     const wants = (k) => (this.platform.inputs || []).includes(k);
     if (wants('kbm') && typeof window !== 'undefined') this.keyboardMouse = new KbmSource(this, canvas);
     if (wants('touch') && typeof document !== 'undefined') this.touch = new TouchSource(this, this.container, canvas);
@@ -38,7 +43,12 @@ export class InputHub {
         });
         document.addEventListener('pointerlockerror', () => this.onPointerLockError?.());
       }
-      if (this.xbox) this._xboxGuards();
+      if (this.xbox) {
+        this._xboxGuards();
+        // mouse/pointer activity = Edge is in cursor mode (or a mouse is attached): used by controllerHint
+        const mark = () => { this.lastPointerAt = performance.now(); };
+        for (const ev of ['mousemove', 'pointerdown', 'click']) window.addEventListener(ev, mark, { passive: true });
+      }
     }
   }
 
@@ -52,8 +62,25 @@ export class InputHub {
       window.addEventListener('popstate', () => { try { history.pushState({ ob3d: 1 }, ''); } catch { /* ignore */ } });
     } catch { /* ignore */ }
   }
-  /** true on Xbox while no controller is visible to the page (UI shows "hold Menu -> Use game controls"). */
-  get controllerHint() { return this.xbox && this.gamepads.length === 0; }
+  /** ms since any connected pad last had input (Infinity if never). */
+  get padIdleMs() {
+    let last = 0;
+    for (const s of this.padSources.values()) if (s.connected) last = Math.max(last, s.lastActive || 0);
+    return last ? performance.now() - last : Infinity;
+  }
+  /**
+   * true on Xbox when the controller probably is not reaching the page: no pad visible at all, OR a pad is visible but
+   * has been silent for 6 s while the page keeps seeing mouse/pointer activity (Edge cursor mode). UI shows
+   * "Hold Menu, then choose Use game controls". Clears as soon as the pad produces input again.
+   */
+  get controllerHint() {
+    if (!this.xbox) return false;
+    if (this.gamepads.length === 0) return true;
+    const now = performance.now();
+    const padIdle = this.padIdleMs;
+    const pointerRecent = now - this.lastPointerAt < 4000 && this.lastPointerAt > 0;
+    return padIdle > 6000 && pointerRecent && this.lastPointerAt > now - padIdle;
+  }
 
   get gamepads() { return [...this.padSources.values()].filter((s) => s.connected); }
 

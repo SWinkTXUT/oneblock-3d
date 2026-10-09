@@ -74,8 +74,14 @@ export function viewportRects(n) {
 
 /** Performance budget per active view count ("smoothness first", user decision). Renderer applies it. */
 export function qualityBudget(nViews, platformKey) {
+  // `composer: false` = render straight to the canvas (no HDR/MSAA post chain). Measured on the dev Mac at 1080p:
+  // bloom ≈10 ms and the composer ≈8–10 ms at 1 view, so consoles/tablets skip both and keep cheap shadows.
   const xbox = platformKey === 'xbox', ipad = platformKey === 'ipad';
-  if (nViews <= 1) return { shadows: !xbox && !ipad ? true : xbox, bloom: !ipad, pixelRatioMax: ipad ? 1.25 : xbox ? 1 : 1.5, viewDistance: 96, pointLights: 8 };
-  if (nViews === 2) return { shadows: true, bloom: false, pixelRatioMax: 1, viewDistance: 64, pointLights: 4 };
-  return { shadows: false, bloom: false, pixelRatioMax: 1, viewDistance: 48, pointLights: 2 };
+  if (nViews <= 1) {
+    if (xbox) return { shadows: true, bloom: false, composer: false, pixelRatioMax: 1, viewDistance: 80, pointLights: 6 };
+    if (ipad) return { shadows: false, bloom: false, composer: false, pixelRatioMax: 1.25, viewDistance: 80, pointLights: 6 };
+    return { shadows: true, bloom: true, composer: true, pixelRatioMax: 1.5, viewDistance: 96, pointLights: 8 };
+  }
+  if (nViews === 2) return { shadows: true, bloom: false, composer: false, pixelRatioMax: 1, viewDistance: 64, pointLights: 4 };
+  return { shadows: false, bloom: false, composer: false, pixelRatioMax: 1, viewDistance: 48, pointLights: 2 };
 }

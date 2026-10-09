@@ -134,10 +134,12 @@ export class View {
     if (!on) { this.highlight.visible = false; this.crack.visible = false; }
   }
 
-  layoutDom(rect) {
+  layoutDom(rect, renderRect) {
     this.rect = rect;
+    if (renderRect) this.renderRect = renderRect;
+    const rr = this.renderRect || rect;
     for (const el of [this.uwDiv, this.hurtDiv]) {
-      el.style.left = rect.x + 'px'; el.style.top = rect.y + 'px'; el.style.width = rect.w + 'px'; el.style.height = rect.h + 'px';
+      el.style.left = rr.x + 'px'; el.style.top = rr.y + 'px'; el.style.width = rr.w + 'px'; el.style.height = rr.h + 'px';
     }
   }
 

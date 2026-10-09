@@ -27,7 +27,7 @@ export class Seat {
     this.lastHeld = undefined; this.fovCur = game.settings.fov; this.swinging = 0; this.hurtT = 0;
     this.targetBlock = null; this.targetMob = null;
     this.tut = { sneakShown: false, sneakT: 0, t: 0 };
-    this.mode = null; this.guard = 0; this.hasData = false;
+    this.mode = null; this.guard = 0; this.hasData = false; this.padId = null;
 
     this.pev = {
       land: (fd) => game.sound.play('land', { vol: Math.min(1.3, 0.4 + fd * 0.12) }),
@@ -52,6 +52,7 @@ export class Seat {
   update(dt) {
     const g = this.game, p = this.player, src = this.input, ui = this.ui;
     if (!src) return;
+    if (g.ui.pausesGame) { this.setMode('menu'); return; } // another seat just opened the global pause menu this frame
     const menu = !!ui.current;
     this.setMode(menu ? 'menu' : 'play');
     this.mineCd = Math.max(0, this.mineCd - dt); this.placeCd = Math.max(0, this.placeCd - dt);
@@ -428,20 +429,22 @@ export class Seat {
 
   hintText() {
     const g = this.game, inv = this.inv, gd = g.goals.done, p = this.player;
-    const gl = (a) => String(this.glyph(a)).replace(/^Hold /, '').replace(/^LMB$/, 'Left-Click').replace(/^RMB$/, 'Right-Click');
+    const touch = this.input && this.input.kind === 'touch';
+    const press = touch ? 'Tap' : 'Press';
+    const gl = (a) => String(this.glyph(a)).replace(/^Hold /, '').replace(/^Tap /, '').replace(/^LMB$/, 'Left-Click').replace(/^RMB$/, 'Right-Click');
     const hasTable = inv.count('crafting_table') > 0;
     const planks = inv.count('oak_planks') + inv.count('spruce_planks');
     const logs = inv.count('oak_log') + inv.count('spruce_log');
     if (hasTable) return `Place the crafting table (${gl('secondary')})`;
     if (!gd.table) {
       if (planks + logs === 0) return `Hold ${gl('primary')} to break the block`;
-      if (planks >= 4) return `Press ${gl('inventory')} and craft a Crafting Table from planks`;
-      return `Press ${gl('inventory')} to open your inventory and craft planks`;
+      if (planks >= 4) return `${press} ${gl('inventory')} and craft a Crafting Table from planks`;
+      return `${press} ${gl('inventory')} to open your inventory and craft planks`;
     }
-    if (!gd.wpick && !inv.count('wooden_pickaxe')) return `Stand near the table, press ${gl('inventory')} and craft a Wooden Pickaxe`;
+    if (!gd.wpick && !inv.count('wooden_pickaxe')) return `Stand near the table, ${press.toLowerCase()} ${gl('inventory')} and craft a Wooden Pickaxe`;
     if (!this.tut.sneakShown) {
       if (p.sneaking) this.tut.sneakShown = true;
-      else { this.tut.sneakT += 0.3; if (this.tut.sneakT > 12) this.tut.sneakShown = true; return `Hold ${this.sneakGlyph()} to sneak – it stops you falling off!`; }
+      else { this.tut.sneakT += 0.3; if (this.tut.sneakT > 12) this.tut.sneakShown = true; return touch ? 'Tap Sneak to crouch – it stops you falling off!' : `Hold ${this.sneakGlyph()} to sneak – it stops you falling off!`; }
     }
     if (g.goalHintT > 0) { const goal = g.goals.next(); if (goal) return `Goal: ${goal.desc}`; }
     return '';
@@ -454,13 +457,13 @@ export class Seat {
 
   // ------------------------------------------------------------------ persistence
   serialize() {
-    return { player: this.player.serialize(), inv: this.inv.serialize(), sel: this.sel, spawn: this.spawn };
+    return { player: this.player.serialize(), inv: this.inv.serialize(), sel: this.sel, spawn: this.spawn, pad: this.padId || null };
   }
   deserialize(d) {
     if (!d) return;
     this.inv.deserialize(d.inv);
     this.player.deserialize(d.player);
-    this.sel = d.sel || 0; this.spawn = d.spawn || null; this.inBed = null;
+    this.sel = d.sel || 0; this.spawn = d.spawn || null; this.inBed = null; this.padId = d.pad || null;
     this.lastGood = null;
   }
 }

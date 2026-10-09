@@ -288,8 +288,10 @@ export class Renderer {
       const q = rects[Math.min(i, rects.length - 1)];
       const x0 = Math.round(ix + q.x * aw), y0 = Math.round(iy + q.y * ah);
       const x1 = Math.round(ix + (q.x + q.w) * aw), y1 = Math.round(iy + (q.y + q.h) * ah);
-      v.layoutDom({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
-      v.syncProjection((x1 - x0) / Math.max(1, y1 - y0));
+      const hud = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+      // one view: the world stays full-bleed behind the TV safe area (only HUD/UI use the inset rect); split screen keeps the inset
+      v.layoutDom(hud, n === 1 ? { x: 0, y: 0, w, h } : hud);
+      v.syncProjection(v.renderRect.w / Math.max(1, v.renderRect.h));
     });
     this._areaCss = { x: ix, y: iy, w: aw, h: ah };
   }
@@ -351,7 +353,8 @@ export class Renderer {
     this.budget = b;
     const shadows = b.shadows && !low;
     this.sun.castShadow = shadows;
-    this.useComposer = !low && (n < 3 || !!this.multiViewAA);   // 3-4 views: no MSAA target / post at all (smoothness first) unless setMultiViewAA(true)
+    // budget.composer === false (xbox, ipad, 2+ views): render straight to the canvas. setMultiViewAA(true) opts back into the MSAA target.
+    this.useComposer = !low && (b.composer === false ? !!this.multiViewAA : true);
     this.maxLights = low ? Math.min(3, b.pointLights) : Math.min(NUM_LIGHTS, b.pointLights);
     this.maxPixelRatio = low ? 1 : Math.max(1, Math.min(window.devicePixelRatio || 1, b.pixelRatioMax));
     this.pixelRatio = this.maxPixelRatio;
@@ -360,7 +363,7 @@ export class Renderer {
     this._bloomAllowed = b.bloom && !low && n <= 1;
     this.bloom.enabled = this._bloomAllowed;
     this.fogFar = Math.min(b.viewDistance * 1.45, low ? 78 : 1e9);
-    const ms = !shadows ? 512 : low ? 512 : n >= 2 ? 1536 : 2048;
+    const ms = !shadows ? 512 : low ? 512 : n >= 2 ? 1024 : 2048;
     this.sun.shadow.mapSize.set(ms, ms);
     if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
     this._lw = -1;
@@ -596,7 +599,10 @@ export class Renderer {
 
   // Dynamic resolution with a few discrete levels (no per-step target churn), hysteresis and warm-up.
   _levels() {
-    const m = this.maxPixelRatio, L = [1.0, 1.25, 1.5].filter((v) => v <= m + 1e-6);
+    const m = this.maxPixelRatio;
+    // consoles / tablets may drop below native resolution before frame rate suffers
+    const steps = (this.platform === 'xbox' || this.platform === 'ipad') ? [0.75, 0.85, 1.0, 1.25, 1.5] : [1.0, 1.25, 1.5];
+    const L = steps.filter((v) => v <= m + 1e-6);
     if (!L.length || Math.abs(L[L.length - 1] - m) > 1e-3) L.push(m);
     return L;
   }
@@ -671,7 +677,7 @@ export class Renderer {
 
     const st = this.st, fb = this.fogBase, fog = this.scene.fog;
     for (const v of views) {
-      const rc = v.rect;
+      const rc = v.renderRect || v.rect;
       if (rc.w < 2 || rc.h < 2) continue;
       const [pw, ph] = region(rc.x, rc.y, rc.w, rc.h);
       // per-view fog (underwater) and sky/cloud placement
@@ -695,7 +701,7 @@ export class Renderer {
       r.setClearColor(0x04050a, 1);
       const a = this._areaCss, t = Math.max(1, Math.round(1 / Math.max(0.5, sx)));
       const line = (x, y, w, h) => { region(x, y, w, h); r.clear(true, false, false); };
-      const rs = views.map((v) => v.rect);
+      const rs = views.map((v) => v.renderRect || v.rect);
       for (const q of rs) {
         if (Math.abs(q.x + q.w - (a.x + a.w)) > 1) line(q.x + q.w - t * 0.5, q.y, t, q.h);
         if (Math.abs(q.y + q.h - (a.y + a.h)) > 1) line(q.x, q.y + q.h - t * 0.5, q.w, t);

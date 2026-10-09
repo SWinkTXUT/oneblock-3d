@@ -8,6 +8,8 @@ import { sunIcon, moonIcon, trophyIcon } from './pixelicons.js';
 import { SeatUI } from './SeatUI.js';
 import { MenuNav, readUi } from './focus.js';
 import { SEATS } from '../platform.js';
+import { padGlyphHtml } from '../input/glyphs.js';
+import { slotSummary } from '../game/team.js';
 
 const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
 const PAUSING = new Set(['pause', 'settings', 'confirm']);
@@ -26,6 +28,11 @@ export class UI {
     this.tip = el('div', 'tooltip hidden', this.root);
     this.title = el('div', 'title hidden', this.root);
     this.fade = el('div', 'fade', this.root);
+    this.padHelp = el('div', 'padhelp hidden', this.root);
+    this.padHelp.innerHTML = '<strong>On Xbox</strong><span>Hold the ' + padGlyphHtml('Menu') + ' (\u2261) button \u2192 choose \u201CUse game controls\u201D</span>';
+    this.fsHint = el('div', 'fshint hidden', this.root);
+    this.fsHint.innerHTML = padGlyphHtml('Press A') + ', or click to go fullscreen';
+    this.pickEl = el('div', 'pickers hidden', this.root);
     this.menuNav = new MenuNav(() => (this.title.classList.contains('hidden') ? this.screen.firstChild : this.title), { onBack: () => this.navBack() });
     // computer: hover a slot and press 1-9 to swap it with that hotbar slot (kept from the original UI)
     document.addEventListener('keydown', (e) => {
@@ -81,6 +88,7 @@ export class UI {
     const night = label === 'Night' || label === 'Dusk';
     if (label !== c.clock) { c.clock = label; this.clockLbl.textContent = label; this.clockIcon.src = night ? moonIcon() : sunIcon(); }
     this.root.classList.toggle('multi', g.seats.length > 1);
+    this.root.dataset.seats = String(g.seats.length);
   }
 
   toast(title, desc, kicker = 'Goal reached!') {
@@ -129,7 +137,40 @@ export class UI {
   // ------------------------------------------------------------------ per-frame
   update(dt) {
     this.updateGlobalHud();
+    this.updateHelp();
+    const anyWin = this.seatUIs.some((u) => u && u.seat.active && u.win);
+    this.root.classList.toggle('winopen', anyWin || !!this.current);
+    this.root.classList.toggle('paused', !!this.current);
     for (const u of this.seatUIs) if (u && u.seat.active) u.update(dt);
+  }
+
+  /** Controller-help panel (Edge cursor mode) and fullscreen hint, Xbox only. */
+  updateHelp() {
+    const g = this.game, xbox = g.platform.key === 'xbox';
+    this.padHelp.classList.toggle('hidden', !(xbox && g.hub.controllerHint));
+    this.fsHint.classList.toggle('hidden', !(xbox && !document.fullscreenElement));
+  }
+
+  /** "Choose your player" cards for pads that are joining while saved slots exist. */
+  renderPickers(pickers) {
+    const g = this.game;
+    const sig = pickers.map((p) => p.sel + ':' + p.src.index).join('|') + '#' + g.slots.map((s) => (s.active ? 1 : 0) + (s.hasData ? 'd' : '')).join('');
+    if (sig === this._pickSig) return;
+    this._pickSig = sig;
+    this.pickEl.innerHTML = '';
+    this.pickEl.classList.toggle('hidden', !pickers.length);
+    for (const p of pickers) {
+      const box = el('div', 'panel picker', this.pickEl);
+      el('h3', '', box).textContent = 'Controller ' + (p.src.index + 1) + ': choose your player';
+      const row = el('div', 'pickrow', box);
+      for (const s of g.slots) {
+        if (s.active) continue;
+        const c = el('div', 'pickcard' + (s.index === p.sel ? ' sel' : ''), row); c.style.setProperty('--seat', SEATS[s.index].color);
+        el('b', '', c).textContent = SEATS[s.index].name;
+        el('span', '', c).textContent = s.hasData ? slotSummary(s) : 'New player';
+      }
+      el('p', '', box).innerHTML = padGlyphHtml('Left') + padGlyphHtml('Right') + ' choose \u00B7 ' + padGlyphHtml('A') + ' confirm \u00B7 ' + padGlyphHtml('B') + ' cancel';
+    }
   }
 
   /** Controller navigation of title / pause / settings / confirm. sources: input sources allowed to drive it. */
@@ -252,10 +293,9 @@ export class UI {
       this.cards = el('div', 'seatcards', t);
       SEATS.forEach((si) => {
         const c = el('div', 'seatcard', this.cards); c.style.setProperty('--seat', si.color); c.dataset.seat = si.index;
-        el('b', '', c).textContent = si.name; el('span', '', c).textContent = 'Press Ⓐ to join';
+        el('b', '', c).textContent = si.name; el('span', '', c).innerHTML = padGlyphHtml('Press A') + ' to join';
       });
     }
-    this.lobbyNote = multi ? el('div', 'lobbynote', t) : null;
     const m = this.titleMenu = el('div', 'titlemenu', t);
     const has = g.hasSave();
     this.btn(m, has ? 'Continue' : (multi ? 'Start game' : 'Play'), () => { t.classList.add('hidden'); g.startPlaying(); }, 'primary');
@@ -265,24 +305,24 @@ export class UI {
     });
     this.btn(m, 'Settings', () => { this.returnTo = 'title'; t.classList.add('hidden'); this.current = null; this.open('settings'); });
     const hint = el('div', 'controls', t);
+    const P = padGlyphHtml;
     hint.innerHTML = g.platform.key === 'xbox'
-      ? '<b>Left stick</b> move · <b>Right stick</b> look · <b>RT</b> break · <b>LT</b> place/use · <b>Ⓐ</b> jump · <b>Ⓨ</b> inventory · <b>Ⓧ</b> goals · <b>Ⓑ</b> drop · <b>Menu</b> pause / join'
+      ? `<b>Left stick</b> move \u00B7 <b>Right stick</b> look \u00B7 ${P('RT')} break \u00B7 ${P('LT')} place/use \u00B7 ${P('A')} jump \u00B7 ${P('Y')} inventory \u00B7 ${P('X')} goals \u00B7 ${P('B')} drop \u00B7 ${P('Menu')} pause`
       : g.platform.key === 'ipad'
-        ? '<b>Left side</b> joystick · <b>Drag</b> look · <b>Hold ⛏</b> break · <b>Tap ▣</b> place/use · <b>Bag</b> inventory'
-        : '<b>WASD</b> move · <b>Mouse</b> look · <b>LMB</b> break · <b>RMB</b> place/use · <b>Shift</b> sneak · <b>Ctrl</b> sprint · <b>E</b> inventory · <b>J</b> goals · <b>Q</b> drop · <b>1-9</b> hotbar · or an Xbox controller';
+        ? '<b>Left side</b> joystick \u00B7 <b>Drag</b> look \u00B7 <b>\u26CF Mine</b> hold to break \u00B7 <b>\u270B Use</b> place / use \u00B7 <b>\uD83C\uDF92</b> inventory'
+        : '<b>WASD</b> move \u00B7 <b>Mouse</b> look \u00B7 <b>LMB</b> break \u00B7 <b>RMB</b> place/use \u00B7 <b>Shift</b> sneak \u00B7 <b>Ctrl</b> sprint \u00B7 <b>E</b> inventory \u00B7 <b>J</b> goals \u00B7 <b>Q</b> drop \u00B7 <b>1-9</b> hotbar \u00B7 or an Xbox controller';
+    const sw = el('a', 'switchdev', t); sw.href = './index.html'; sw.textContent = 'Switch device';
     this.updateLobby();
     this.menuNav.reset();
   }
 
   updateLobby() {
-    if (this.lobbyNote) this.lobbyNote.textContent = this.game.hub && this.game.hub.controllerHint
-      ? 'No controller detected \u2014 press a button on it. If a mouse cursor appears, hold Menu and choose "Use game controls".' : '';
     if (!this.cards) return;
     const g = this.game;
     for (const c of this.cards.children) {
       const seat = g.slots[+c.dataset.seat], on = !!(seat && seat.active);
       c.classList.toggle('on', on);
-      c.lastChild.textContent = on ? 'Ready!' : 'Press Ⓐ to join';
+      c.lastChild.innerHTML = on ? 'Ready!' : padGlyphHtml('Press A') + ' to join';
     }
   }
 

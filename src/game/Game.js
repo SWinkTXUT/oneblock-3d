@@ -15,7 +15,8 @@ import { MobManager } from './mobs/MobManager.js';
 import { rollDrops, breakInfo, materialOf } from './rules.js';
 import { overlapsCell } from './physics.js';
 import { countSurface, planPhaseSpawn } from './spawning.js';
-import { nearestSeat, sleepStatus, livingSeats, seatSaveData } from './team.js';
+import { nearestSeat, sleepStatus, livingSeats, seatSaveData, joinOptions } from './team.js';
+import { readUi } from '../ui/focus.js';
 import { keyOf, newChest, tickFurnace, entityContents, serializeEntities, deserializeEntities } from './BlockEntities.js';
 import { loadSettings, saveSettings, readSave, writeSave, clearSave } from './Save.js';
 import { currentPlatform, SEATS } from '../platform.js';
@@ -75,6 +76,15 @@ export class Game {
     });
     this.hub.onDisconnect((src) => this.onPadDisconnect(src));
     this.hub.onUserGesture = () => this.sound.resume();
+    this.pickers = [];
+    window.addEventListener('pointerup', () => this.sound.resume(), true);
+    if (this.platform.fullscreenOnPlay) { // fullscreen needs a REAL user gesture (click/tap/key, incl. an Edge cursor-mode click): try on every one until it works
+      const tryFs = () => { if (!document.fullscreenElement) this.goFullscreen(); };
+      for (const ev of ['pointerdown', 'click', 'keydown', 'touchend']) window.addEventListener(ev, tryFs, true);
+    }
+    if (this.platform.key === 'ipad') window.addEventListener('resize', () => { // portrait hides the game behind the rotate hint: pause so nothing kills an unseen player
+      if (this.mode === 'play' && innerHeight > innerWidth && !this.ui.current && !this.anySeatUi()) this.openPause(this.seats[0]);
+    });
     canvas.addEventListener('mousedown', () => {
       this.sound.resume();
       if (this.platform.pointerLock && this.mode === 'play' && !this.hub.pointerLocked && !this.ui.current && !this.slots[0].ui.current && !this.slots[0].player.dead) { this.noLock = false; this.hub.requestPointerLock(); }
@@ -111,6 +121,7 @@ export class Game {
     const seat = this.slots[i];
     seat.input = source; seat.disconnected = false; seat.active = true;
     if (source && source.kind === 'gamepad') {
+      seat.padId = { id: source.padId || source.id, index: source.index };
       this.hub.assign(source, i);
       if (this.mode === 'title') for (const a of ['ui_accept', 'ui_back', 'ui_alt', 'ui_split']) source.pressed(a); // the join press must not also start the game
     }
@@ -119,9 +130,11 @@ export class Game {
       seat.avatar = this.renderer.createPlayerAvatar(i);
       if (seat.avatar.object3d && !seat.avatar.object3d.parent) this.renderer.scene.add(seat.avatar.object3d);
     }
-    if (seat.avatar) seat.avatar.setVisible(true);
+    if (seat.avatar) seat.avatar.setVisible(this.mode === 'play');
     if (!seat.hasData || this.mode === 'play') {
-      if (!seat.hasData || this.mode === 'play') { const sp = seat.spawnPoint(); seat.player.reset(sp.x, sp.y, sp.z); if (!seat.hasData) seat.player.pitch = -1.30; }
+      const keep = seat.hasData ? { hp: seat.player.health, hu: seat.player.hunger, sat: seat.player.saturation } : null;
+      const sp = seat.spawnPoint(); seat.player.reset(sp.x, sp.y, sp.z); if (!seat.hasData) seat.player.pitch = -1.30;
+      if (keep && keep.hp > 0) { seat.player.health = keep.hp; seat.player.hunger = keep.hu; seat.player.saturation = keep.sat; } // leaving and rejoining does not heal
     }
     seat.hasData = true;
     if (source && source.pressed) seat.drain(); // the join press (Menu) must not also act as pause / accept
@@ -135,7 +148,15 @@ export class Game {
 
   leaveSeat(seat) {
     if (this.seats.length <= 1 && this.mode === 'play') { this.toTitle(); return; }
+    this.dropSeat(seat);
+    this.checkSleep(null);
+    this.save();
+  }
+
+  /** Remove a seat from play (keeps its slot data). Used by Leave, lobby ghost cleanup and unplugged pads at start. */
+  dropSeat(seat) {
     if (seat.ui.current) seat.ui.close(true, true);
+    if (this.ui.pauseOwner === seat) this.ui.pauseOwner = this.seats.find((s) => s !== seat && !s.disconnected) || null;
     if (seat.input && seat.input.kind === 'gamepad') this.hub.unassign(seat.input);
     seat.input = null; seat.active = false; seat.disconnected = false; seat.inBed = null;
     seat.clearTarget();
@@ -144,8 +165,6 @@ export class Game {
     this.seats = this.slots.filter((s) => s.active);
     this.relayout();
     this.ui.updateLobby();
-    this.checkSleep(null);
-    this.save();
   }
 
   relayout() {
@@ -157,9 +176,13 @@ export class Game {
   onPadDisconnect(src) {
     for (const s of this.slots) {
       if (s.active && s.input && (s.input === src || (s.input.parts && s.input.parts.includes(src)))) {
-        if (this.platform.key === 'xbox') { s.disconnected = true; s.clearTarget(); }
+        if (this.platform.key !== 'xbox') continue;
+        if (this.mode === 'title') { this.dropSeat(s); continue; } // lobby: a vanished pad leaves no ghost seat
+        s.disconnected = true; s.clearTarget();
+        if (this.ui.pauseOwner === s) this.ui.pauseOwner = this.seats.find((x) => x !== s && !x.disconnected) || null; // pause ownership moves to a connected pad
       }
     }
+    this.pickers = this.pickers.filter((p) => p.src !== src);
   }
 
   /** New controllers pressing Menu/Start: reconnect a frozen seat first, else drop in as a new seat (multi-seat platforms). */
@@ -170,9 +193,36 @@ export class Game {
     for (const src of joins) {
       const dis = this.slots.find((s) => s.active && s.disconnected);
       if (dis) { dis.input = src; this.hub.assign(src, dis.index); dis.disconnected = false; dis.mode = null; continue; }
-      const free = this.slots.find((s) => !s.active);
-      if (free) { this.addSeat(free.index, src); this.sound.play('pop'); if (this.mode === 'play') this.ui.message(`${free.name} joined`); }
+      if (this.pickers.some((p) => p.src === src)) continue;
+      const opts = joinOptions(this.slots, { id: src.padId || src.id, index: src.index });
+      if (opts.preferred < 0) continue;
+      if (opts.needsPick) { this.pickers.push({ src, sel: opts.preferred }); src.seatIndex = 99; src.setMode('menu'); }
+      else this.joinAs(opts.preferred, src);
     }
+  }
+
+  joinAs(index, src) {
+    const seat = this.addSeat(index, src);
+    this.sound.play('pop');
+    if (this.mode === 'play') seat.ui.message(`You are ${seat.name}`);
+    return seat;
+  }
+
+  /** "Choose your player": a joining pad picks which saved P1..P4 slot it takes (left/right, A confirm, B cancel). */
+  runPickers() {
+    for (const p of [...this.pickers]) {
+      const free = this.slots.filter((s) => !s.active).map((s) => s.index);
+      if (!p.src.connected || !free.length) { this.pickers = this.pickers.filter((q) => q !== p); this.hub.unassign(p.src); continue; }
+      p.src.setMode('menu');
+      const pr = readUi(p.src);
+      if (!free.includes(p.sel)) p.sel = free[0];
+      const at = free.indexOf(p.sel);
+      if (pr.left) p.sel = free[(at + free.length - 1) % free.length];
+      if (pr.right || pr.down) p.sel = free[(at + 1) % free.length];
+      if (pr.accept) { this.pickers = this.pickers.filter((q) => q !== p); this.joinAs(p.sel, p.src); }
+      else if (pr.back) { this.pickers = this.pickers.filter((q) => q !== p); this.hub.unassign(p.src); }
+    }
+    this.ui.renderPickers(this.pickers);
   }
 
   /** Computer: keyboard+mouse, plus the first controller if one is connected. */
@@ -184,10 +234,9 @@ export class Game {
     else if (!pad && seat.input.kind === 'combined') { seat.input = hub.keyboardMouse; seat.mode = null; }
   }
 
+  /** Pad(s) allowed to drive the title / pause menus: every connected assigned source (no soft-lock if one pad dies). */
   menuSources() {
-    const owner = this.ui.pauseOwner;
-    if (this.mode === 'play' && owner && owner.input) return [owner.input];
-    return this.seats.filter((s) => s.input).map((s) => s.input);
+    return this.seats.filter((s) => s.input && !s.disconnected && s.input.connected !== false).map((s) => s.input);
   }
 
   nearestSeat(x, y, z, maxDist) { return nearestSeat(this.seats, x, y, z, maxDist); }
@@ -257,12 +306,13 @@ export class Game {
 
   startPlaying() {
     if (!this.hasWorld) this.newWorld();
+    if (this.platform.maxSeats > 1) for (const s of [...this.seats]) if (!s.input || s.input.connected === false) this.dropSeat(s);
     if (!this.seats.length) { this.ui.showTitle(); return; }
     this.mode = 'play';
     this.hub.joinOnA = false;
     this.ui.hideTitle();
     this.sound.resume();
-    for (const s of this.slots) { s.ui.setVisible(s.active); s.lastHeld = undefined; s.mode = null; s.disconnected = false; }
+    for (const s of this.slots) { s.ui.setVisible(s.active); s.lastHeld = undefined; s.mode = null; s.disconnected = s.active && !!s.input && s.input.connected === false; if (s.avatar) s.avatar.setVisible(s.active); }
     this.setHandVisible(true);
     this.relayout();
     for (const s of this.seats) s.ui.close(true, true);
@@ -291,6 +341,7 @@ export class Game {
     for (const s of this.slots) { if (s.ui.current) s.ui.close(true, true); s.clearTarget(); s.ui.setVisible(false); s.setMode('menu'); }
     this.relayout();
     this.setHandVisible(false);
+    for (const s of this.slots) if (s.avatar) s.avatar.setVisible(false);
     this.ui.showTitle();
   }
 
@@ -392,11 +443,13 @@ export class Game {
     const st = sleepStatus(this.seats);
     if (st.total === 0) { this.ui.setSleepMessage(''); return; }
     if (st.all) {
-      if (this.sleepT > 0) return;
+      if (this.sleepT > 0 || this._sleepPending) return;
+      this._sleepPending = true;
       this.sleepT = 2.6;
       this.sound.play('sleep');
       this.ui.setSleepMessage('');
       this.ui.sleepFade(() => {
+        this._sleepPending = false;
         this.state.time = 5;
         for (const s of this.seats) s.inBed = null;
         this.events.emit('sleep');
@@ -473,8 +526,10 @@ export class Game {
     this.titleT += dt;
     this.hub.joinOnA = this.platform.maxSeats > 1;
     this.handleJoins();
+    this.runPickers();
     this.refreshCombined();
     this.ui.updateLobby();
+    this.ui.updateHelp();
     // title navigation by controller; seats' inputs are in menu mode
     for (const s of this.seats) s.setMode('menu');
     this.ui.navMenus(this.menuSources());
@@ -492,12 +547,13 @@ export class Game {
   updatePlay(dt) {
     const ui = this.ui;
     this.handleJoins();
+    this.runPickers();
     this.refreshCombined();
     const goalsFreeze = this.seats.length === 1 && this.seats[0].ui.current === 'goals';
     if (ui.pausesGame) {
-      const owner = ui.pauseOwner;
+      if (ui.pauseOwner && ui.pauseOwner.disconnected) ui.pauseOwner = this.seats.find((x) => !x.disconnected) || null;
       ui.navMenus(this.menuSources());
-      for (const s of this.seats) if (s !== owner && s.input) s.drain();
+      for (const s of this.seats) if (s.disconnected && s.input) s.drain();
     } else if (goalsFreeze) {
       const s = this.seats[0]; s.setMode('menu'); s.ui.nav(s.input);
     } else {

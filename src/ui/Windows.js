@@ -13,7 +13,8 @@ const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cl
  * double-tap = shift (quick move). fn(button, shift).
  */
 function pressable(node, fn, { touchMax = false } = {}) {
-  let timer = null, fired = false, lastTap = 0, downEv = null;
+  let timer = null, fired = false, lastTap = 0, lastKey = null, downEv = null;
+  const keyOf = (e) => (e.target && e.target.closest && e.target.closest('.recipe')) || node; // a double-tap must hit the SAME row/slot
   node.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     downEv = e;
@@ -26,8 +27,9 @@ function pressable(node, fn, { touchMax = false } = {}) {
     if (e.pointerType !== 'touch') return;
     clearTimeout(timer);
     if (fired) return;
-    const now = performance.now();
-    const dbl = now - lastTap < 320; lastTap = dbl ? 0 : now;
+    const now = performance.now(), k = keyOf(e);
+    const dbl = now - lastTap < 320 && k === lastKey;
+    lastTap = dbl ? 0 : now; lastKey = k;
     fn(0, dbl, e);
   };
   node.addEventListener('pointerup', up);
@@ -44,7 +46,7 @@ class Slot {
     this.cnt = el('span', 'scount', this.el);
     this.bar = el('div', 'sbar', this.el); this.barFill = el('i', '', this.bar);
     this.cache = '';
-    pressable(this.el, (button, shift) => { win.setFocus(this.el, true); win.slotClick(this, button, shift); }, { touchMax: false });
+    pressable(this.el, (button, shift, ev) => { win.setFocus(this.el, true); if (shift && ev && ev.pointerType === 'touch') win.touchQuick(this); else win.slotClick(this, button, shift); }, { touchMax: false });
     this.el._slot = this;
     this.el.addEventListener('mouseenter', () => { win.ui.hoverSlot = this; win.ui.showTip(this.get(), this.el); });
     this.el.addEventListener('mouseleave', () => { if (win.ui.hoverSlot === this) win.ui.hoverSlot = null; win.ui.showTip(null); });
@@ -143,6 +145,9 @@ export class Window {
 
     if (t === 'inventory') {
       this.buildBook();
+      let shown = 0; try { shown = +(localStorage.getItem('oneblock3d.tipinv') || 0); localStorage.setItem('oneblock3d.tipinv', String(shown + 1)); } catch { /* ignore */ }
+      const tip = el('div', 'touchtip', this.root); tip.textContent = 'Tap an item to pick it up, tap a slot to place it \u00B7 hold to split \u00B7 double-tap to quick-move';
+      if (shown < 5) tip.classList.add('first');
       this.tabBar = el('div', 'wintabs', this.root);
       this.tabBtns = {};
       for (const [k, label] of [['inv', '\u25C0 LB  Inventory'], ['book', 'Recipes  RB \u25B6']]) {
@@ -231,6 +236,20 @@ export class Window {
 
   // ------------------------------------------------------------------ slot interaction
   slotClick(slot, button, shift) {
+    const had = !!this.ui.cursor;
+    this.slotClick0(slot, button, shift);
+    if (!had && this.ui.cursor) this.lastPick = { slot, t: performance.now() };
+  }
+
+  /** Touch double-tap: undo the pick-up the first tap did, then quick-move that stack. */
+  touchQuick(slot) {
+    const ui = this.ui;
+    if (ui.cursor && this.lastPick && this.lastPick.slot === slot && performance.now() - this.lastPick.t < 600 && !slot.get()) { slot.set(ui.cursor); ui.cursor = null; }
+    if (slot.get()) this.quickMove(slot);
+    this.after();
+  }
+
+  slotClick0(slot, button, shift) {
     const ui = this.ui;
     const cur = ui.cursor, s = slot.get();
     ui.sfx('click');
@@ -312,7 +331,7 @@ export class Window {
     this.tab = k;
     this.root.dataset.tab = k;
     if (this.tabBtns) for (const t in this.tabBtns) this.tabBtns[t].classList.toggle('on', t === k);
-    if (!quiet) { this.ui.sfx('click'); this.focusFirst(); }
+    if (!quiet) { this.ui.sfx('click'); if (this.ui.fitPanel) this.ui.fitPanel(); this.focusFirst(); }
   }
 
   // ------------------------------------------------------------------ controller focus
@@ -356,6 +375,13 @@ export class Window {
       if (!list || !list.contains(e) || inBook) return true;
       const r = e.getBoundingClientRect(); return r.bottom > lr.top + 4 && r.top < lr.bottom - 4; // only visible rows when entering the list
     };
+    pr = { ...pr };
+    if (inBook && (pr.right || (pr.left && this.tabbed))) { // page jump through the long recipe list
+      const rows = [...list.children].filter((r) => r.dataset && r.dataset.id !== undefined);
+      const at = rows.indexOf(cur);
+      if (at >= 0) { this.setFocus(rows[Math.max(0, Math.min(rows.length - 1, at + (pr.right ? 6 : -6)))]); this.ui.sfx('click'); }
+      pr.left = pr.right = false;
+    }
     for (const d of ['up', 'down', 'left', 'right']) {
       if (!pr[d]) continue;
       const n = spatialNext(els, this.focusEl, d, allow);

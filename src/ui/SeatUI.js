@@ -23,7 +23,7 @@ export class SeatUI {
     this.buildHud(this.inner);
     this.nameChip = el('div', 'namechip', root); this.nameChip.textContent = seat.name;
     this.overlay = el('div', 'seatoverlay hidden', root);
-    this.overlay.innerHTML = '<strong>Reconnect controller</strong><span>Press Menu on the controller to rejoin</span>';
+    this.overlay.innerHTML = '<strong>Controller disconnected</strong><span>Turn it on again to keep playing</span>';
     this.screen = el('div', 'screen hidden', root);
     this.cursorEl = el('div', 'cursoritem hidden', ui.overlay);
     this.cursorImg = el('img', '', this.cursorEl); this.cursorCnt = el('span', 'scount', this.cursorEl);
@@ -61,6 +61,7 @@ export class SeatUI {
     for (let i = 0; i < 10; i++) { this.heartEls.push(el('img', '', this.hearts)); this.foodEls.push(el('img', '', this.hunger)); this.armorEls.push(el('img', '', this.armorRow)); }
     this.heldName = el('div', 'heldname', bottom);
     const hb = this.hotbar = el('div', 'hotbar', bottom);
+    hb.dataset.obHotbar = '1'; // agreed selector with the touch overlay: [data-ob-hotbar]
     this.hbSlots = [];
     for (let i = 0; i < 9; i++) {
       const s = el('div', 'slot hb', hb); const img = el('img', 'sicon', s); const cnt = el('span', 'scount', s); const bar = el('div', 'sbar', s); const fill = el('i', '', bar);
@@ -108,6 +109,7 @@ export class SeatUI {
       this.foodEls.forEach((e) => e.classList.toggle('poison', p.poison > 0));
     }
     this.overlay.classList.toggle('hidden', !seat.disconnected);
+    this.root.classList.toggle('disc', !!seat.disconnected);
     this.root.classList.toggle('windowopen', WINDOWS.has(this.current));
   }
 
@@ -127,7 +129,8 @@ export class SeatUI {
     st.left = r.x + 'px'; st.top = r.y + 'px'; st.width = r.w + 'px'; st.height = r.h + 'px';
     this.root.classList.toggle('multi', multi);
     const cap = Math.max(1, g.platform.uiScale);
-    const s = Math.max(0.55, Math.min(cap, r.w / 520, r.h / (multi ? 380 : 400)));
+    let s = Math.max(0.55, Math.min(cap, r.w / 520, r.h / (multi ? 380 : 400)));
+    if (g.platform.key === 'ipad') s = Math.min(s, Math.max(0.6, (r.w - 560) / 450)); // keep the hotbar clear of the touch buttons on both sides
     this.scale = s;
     this.inner.style.width = r.w / s + 'px'; this.inner.style.height = r.h / s + 'px';
     this.inner.style.transform = `scale(${s})`;
@@ -206,6 +209,7 @@ export class SeatUI {
     this.seat.setMode('menu');
     g.onSeatUiOpen(this.seat, type);
     this.padMode = !!(this.seat.input && this.seat.input.kind === 'gamepad');
+    if (this.padMode && !this._padFilter) { this._padFilter = true; this.bookFilter = 'can'; } // controllers start on the short Craftable list
     if (WINDOWS.has(type)) {
       this.win = new Window(this, type, { table: !!data.table, key: data.key });
       this.setPanel(this.win.root, 'dim windowscreen');

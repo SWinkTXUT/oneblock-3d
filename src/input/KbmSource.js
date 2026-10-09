@@ -1,6 +1,7 @@
 // Keyboard + mouse (pointer lock). Faithful port of src/game/Input.js behaviour:
 // double-tap W sprint latch, Ctrl sprint, wheel hotbar, digit keys, E/J/Q (Ctrl+Q = whole stack), click-to-lock.
 import { InputSource } from './InputSource.js';
+import { keyGlyphHtml } from './glyphs.js';
 
 const MENU_KEYS = {
   ArrowUp: 'ui_up', ArrowDown: 'ui_down', ArrowLeft: 'ui_left', ArrowRight: 'ui_right',
@@ -115,6 +116,8 @@ export class KbmSource extends InputSource {
   }
 
   down(action) { return this.mode === 'play' && this.held.has(action); }
+
+  glyphHtml(a) { return keyGlyphHtml(this.glyph(a)); }
 
   glyph(a) {
     return ({

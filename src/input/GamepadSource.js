@@ -1,15 +1,17 @@
 // One physical controller, standard mapping. Bedrock-like layout per SPEC-PLATFORMS §3b.
 import { InputSource } from './InputSource.js';
+import { padGlyphHtml } from './glyphs.js';
 import { applyDeadzone, lookCurve, lookAccel, LOOK_BASE_RATE, MenuRepeater, stickToDirs } from './pure.js';
 
 export const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8, MENU: 9, LS: 10, RS: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15, GUIDE: 16 };
 const TRIGGER_ON = 0.5, TRIGGER_OFF = 0.35;
 const DROP_STACK_HOLD = 0.6;
 
+// Plain-text tokens (no circled Unicode letters: they may be missing from the console font). See glyphs.js for badges.
 const GLYPHS = {
-  primary: 'RT', secondary: 'LT', jump: 'Ⓐ', inventory: 'Ⓨ', goals: 'Ⓧ', drop: 'Ⓑ', dropStack: 'Hold Ⓑ', pause: 'Menu',
-  hotbarNext: 'RB', hotbarPrev: 'LB', ui_accept: 'Ⓐ', ui_back: 'Ⓑ', ui_alt: 'Ⓧ', ui_split: 'Ⓨ', ui_tabNext: 'RB', ui_tabPrev: 'LB',
-  ui_up: '↑', ui_down: '↓', ui_left: '←', ui_right: '→', sprint: 'L3', sneak: 'R3',
+  primary: 'RT', secondary: 'LT', jump: 'A', inventory: 'Y', goals: 'X', drop: 'B', dropStack: 'Hold B', pause: 'Menu',
+  hotbarNext: 'RB', hotbarPrev: 'LB', ui_accept: 'A', ui_back: 'B', ui_alt: 'X', ui_split: 'Y', ui_tabNext: 'RB', ui_tabPrev: 'LB',
+  ui_up: 'Up', ui_down: 'Down', ui_left: 'Left', ui_right: 'Right', sprint: 'L3', sneak: 'R3', join: 'A', goalsAlt: 'View',
 };
 
 export class GamepadSource extends InputSource {
@@ -59,7 +61,8 @@ export class GamepadSource extends InputSource {
     this._rtPrev = this.rt; this._ltPrev = this.lt;
 
     // join presses are recorded in any mode
-    if (edge(BTN.MENU) || (this.joinOnA && edge(BTN.A))) this.joinPressed = true;
+    // Menu is also Edge's own controller menu (hold), so View and (on lobby screens / Xbox) A join as well
+    if (edge(BTN.MENU) || edge(BTN.VIEW) || (this.joinOnA && edge(BTN.A))) this.joinPressed = true;
 
     if (play) {
       this._setHeld('primary', this.rt); this._setHeld('secondary', this.lt);
@@ -132,6 +135,7 @@ export class GamepadSource extends InputSource {
 
   down(a) { return this.mode === 'play' && this.held.has(a); }
   glyph(a) { return GLYPHS[a] || a; }
+  glyphHtml(a) { return padGlyphHtml(this.glyph(a)); }
 
   consumeJoinPress() { const j = this.joinPressed; this.joinPressed = false; return j; }
 

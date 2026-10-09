@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { applyDeadzone, lookCurve, lookAccel, MenuRepeater, EdgeSet, stickToDirs } from '../pure.js';
+import { SprintLatch, applyDeadzone, lookCurve, lookAccel, MenuRepeater, EdgeSet, stickToDirs } from '../pure.js';
 import { GamepadSource, BTN } from '../GamepadSource.js';
 import { CombinedSource } from '../InputSource.js';
 
@@ -53,4 +53,15 @@ const g4 = new GamepadSource(3); g4.update(0.016, pad()); g4.update(0.016, pad({
 // combined
 const k = new GamepadSource(5); const c = new CombinedSource(k, g); k.update(0.016, pad()); k.update(0.016, pad({ b: [BTN.Y] }));
 assert.ok(c.pressed('inventory')); assert.ok(!c.pressed('inventory'));
+// glyphs: plain tokens, badge html
+assert.equal(g.glyph('jump'), 'A'); assert.equal(g.glyph('dropStack'), 'Hold B'); assert.ok(!/[\u24b6-\u24e9]/.test(JSON.stringify(['jump','inventory','goals','drop','ui_accept'].map((a) => g.glyph(a)))));
+assert.equal(g.glyphHtml('dropStack'), 'Hold <span class="btn-glyph btn-b">B</span>'); assert.ok(g.glyphHtml('primary').includes('btn-trigger'));
+// join: View or A (when joinOnA)
+const j = new GamepadSource(7); j.update(0.016, pad()); j.update(0.016, pad({ b: [BTN.VIEW] })); assert.ok(j.consumeJoinPress());
+j.update(0.016, pad()); j.update(0.016, pad({ b: [BTN.A] })); assert.ok(!j.consumeJoinPress()); j.joinOnA = true; j.update(0.016, pad()); j.update(0.016, pad({ b: [BTN.A] })); assert.ok(j.consumeJoinPress());
+// joystick sprint latch: needs >= 95 % held for 0.25 s, releases below 50 %
+const sl = new SprintLatch(); for (let i = 0; i < 10; i++) assert.ok(!sl.update(0.016, 0.9)); // firm but not full push: never sprints
+for (let i = 0; i < 10; i++) sl.update(0.016, 1); assert.ok(!sl.on, '0.16 s is not enough'); for (let i = 0; i < 8; i++) sl.update(0.016, 1); assert.ok(sl.on);
+sl.update(0.016, 0.7); assert.ok(sl.on, 'stays on until below 50 %'); sl.update(0.016, 0.3); assert.ok(!sl.on);
+sl.update(0.1, 1); sl.update(0.1, 0.8); sl.update(0.1, 1); assert.ok(!sl.on, 'timer resets when the push relaxes');
 console.log('input tests OK');

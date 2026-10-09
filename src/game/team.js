@@ -1,7 +1,7 @@
 // Pure shared-world rules for multiple seats (no DOM/three) so they are unit-testable.
-// A "seat" here only needs: { index, active, player:{x,y,z,dead}, inv:{canAdd(key,n)}, inBed, disconnected }.
+// A "seat" here only needs (disconnected seats do not count as living): { index, active, player:{x,y,z,dead}, inv:{canAdd(key,n)}, inBed, disconnected }.
 
-export const isLiving = (s) => !!s && s.active !== false && !(s.player && s.player.dead);
+export const isLiving = (s) => !!s && s.active !== false && !s.disconnected && !(s.player && s.player.dead);
 
 export function livingSeats(seats) { return seats.filter(isLiving); }
 
@@ -46,4 +46,26 @@ export function seatSaveData(seat, spawnPos, serializeSeat) {
   const d = serializeSeat(seat);
   if (p.y >= -30) seat.lastGood = d;
   return d;
+}
+
+import { ITEMS } from '../data/items.js';
+
+/** Short description of what a saved slot holds, e.g. "23 Oak Planks, 3 Diamond" (top 3 stacks by count). */
+export function slotSummary(slot) {
+  const tally = {};
+  for (const st of slot.inv ? [...slot.inv.slots, ...slot.inv.armor] : []) if (st) tally[st.key] = (tally[st.key] || 0) + st.n;
+  const top = Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${n} ${ITEMS[k] ? ITEMS[k].name : k}`);
+  return top.length ? top.join(', ') : 'New player';
+}
+
+/**
+ * Which slots may a joining pad take? `pad` = { id, index } of the controller. Free slots only.
+ * preferred: the slot whose saved controller identity matches, else the lowest free slot.
+ * needsPick: more than one free slot AND at least one of them holds saved data => let the player choose their own save.
+ */
+export function joinOptions(slots, pad) {
+  const free = slots.filter((s) => !s.active);
+  const match = pad && free.find((s) => s.padId && s.padId.id === pad.id && s.padId.index === pad.index);
+  const preferred = match ? match.index : free.length ? free[0].index : -1;
+  return { options: free.map((s) => s.index), preferred, needsPick: free.length > 1 && free.some((s) => s.hasData) };
 }
