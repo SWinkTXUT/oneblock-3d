@@ -313,6 +313,13 @@ export class Sky {
 
   setPixelScale(s) { this.starMat.uniforms.uScale.value = s; }
 
+  // position the camera-following parts (dome, sun, stars, clouds) for the view about to be rendered
+  place(camPos) {
+    this.group.position.copy(camPos);
+    this.clouds.position.set(camPos.x, this.cloudY, camPos.z);
+    this.cloudMat.uniforms.uCam.value.copy(camPos);
+  }
+
   update(dt, camPos, st) {
     this.time += dt;
     this.group.position.copy(camPos);

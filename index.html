@@ -7,12 +7,27 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/src/styles.css" />
+  <link rel="stylesheet" href="./src/styles.css" />
 </head>
-<body>
-  <div id="app"></div>
-  <div id="ui"></div>
-  <div id="boot">Loading One Block…</div>
-  <script type="module" src="/src/main.js"></script>
+<body data-platform="launcher">
+  <div class="launcher">
+    <div class="logo" style="text-align:center">
+      <h1 style="margin:0;font-family:var(--font-hd);font-weight:400;display:flex;flex-direction:column;gap:6px;align-items:center"><span style="font-size:clamp(34px,7vw,72px);color:#f6f1e0;text-shadow:0 4px 0 #6a6258,0 8px 0 #2b2822,0 14px 24px rgba(0,0,0,.6);letter-spacing:4px">ONE</span><span style="font-size:clamp(34px,7vw,72px);color:#7ee05a;text-shadow:0 4px 0 #2f7a1d,0 8px 0 #163d0e,0 14px 24px rgba(0,0,0,.6);letter-spacing:4px">BLOCK</span></h1>
+      <p class="tag" style="margin:18px 0 0;color:#fff4c4;font-size:13px;letter-spacing:2px">Choose how you want to play</p>
+    </div>
+    <div class="cards">
+      <a class="card" id="card-computer" href="./computer.html"><span class="ico">&#128187;</span><h2>Computer</h2><p>Keyboard &amp; mouse.<br />An Xbox controller works too.</p><span class="badge">Detected</span></a>
+      <a class="card" id="card-xbox" href="./xbox.html"><span class="ico">&#127918;</span><h2>Xbox</h2><p>Up to 4 players, split screen,<br />one controller each. Edge browser.</p><span class="badge">Detected</span></a>
+      <a class="card" id="card-ipad" href="./ipad.html"><span class="ico">&#128241;</span><h2>iPad</h2><p>Touch controls, one player.<br />Landscape works best.</p><span class="badge">Detected</span></a>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var ua = navigator.userAgent || '', touch = navigator.maxTouchPoints > 1;
+      var kind = /Xbox/i.test(ua) ? 'xbox' : (touch && (/iPad/i.test(ua) || /Macintosh/i.test(ua))) ? 'ipad' : 'computer';
+      var el = document.getElementById('card-' + kind);
+      if (el) { el.classList.add('detected'); el.focus(); }
+    })();
+  </script>
 </body>
 </html>

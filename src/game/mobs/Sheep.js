@@ -28,7 +28,7 @@ export class Sheep extends Mob {
     const g = this.game, w = g.world;
     if (this.sheared) { this.regrowT -= dt; if (this.regrowT <= 0) { this.sheared = false; this.applyWool(); } }
     this.soundT -= dt;
-    if (this.soundT <= 0) { this.soundT = 8 + Math.random() * 14; if (this.dist2(g.player.x, g.player.y, g.player.z) < 20 * 20) g.sound.play('baa', { vol: 0.6, pitch: 0.9 + Math.random() * 0.3 }); }
+    if (this.soundT <= 0) { this.soundT = 8 + Math.random() * 14; if (g.nearestSeat(this.x, this.y, this.z, 20)) g.sound.play('baa', { vol: 0.6, pitch: 0.9 + Math.random() * 0.3 }); }
 
     this.stateT -= dt;
     this.speed = 0;

@@ -18,7 +18,9 @@ export class Zombie extends Mob {
   }
 
   think(dt) {
-    const g = this.game, p = g.player, w = g.world;
+    const g = this.game, w = g.world;
+    const seat = g.nearestSeat(this.x, this.y, this.z);
+    const p = seat ? seat.player : null;
     this.atkCd -= dt;
     this.soundT -= dt;
     if (this.rise > 0) { // rising from the ground: harmless and stationary
@@ -28,9 +30,9 @@ export class Zombie extends Mob {
       if (this.rise <= 0) this.yOff = 0;
       return;
     }
-    const dx = p.x - this.x, dz = p.z - this.z, dy = p.y - this.y;
+    const dx = p ? p.x - this.x : 99, dz = p ? p.z - this.z : 99, dy = p ? p.y - this.y : 99;
     const flat = Math.hypot(dx, dz);
-    const near = !p.dead && flat < 16 && Math.abs(dy) < 12;
+    const near = !!p && !p.dead && flat < 16 && Math.abs(dy) < 12;
     if (this.soundT <= 0) { this.soundT = 4 + Math.random() * 6; if (flat < 24) g.sound.play('zombie_groan', { vol: Math.max(0.2, 1 - flat / 24) * 0.8 }); }
 
     // daylight burning
@@ -53,7 +55,7 @@ export class Zombie extends Mob {
       if (this.blocked && this.onGround) this.wantJump = true;
       if (flat < 1.15 && Math.abs(dy) < 1.6 && this.atkCd <= 0) {
         this.atkCd = 1.0;
-        g.damagePlayer(3, 'Slain by Zombie', this);
+        g.damageSeat(seat, 3, 'Slain by Zombie', this);
       }
     } else {
       this.stateT -= dt;

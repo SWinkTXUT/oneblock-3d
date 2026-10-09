@@ -4,13 +4,16 @@ import { World } from './world/World.js';
 import { Renderer } from './render/Renderer.js';
 import { BLOCKS, BLOCK_BY_KEY } from './data/blocks.js';
 import { ITEMS, ALL_ITEM_KEYS } from './data/items.js';
+import { InputHub } from './input/InputHub.js';
+import { PLATFORMS, SEATS } from './platform.js';
 
 const $ = (id) => document.getElementById(id);
 const B = (k) => BLOCK_BY_KEY[k].id;
 
 const world = new World();
 const renderer = new Renderer($('view'), world);
-const cam = renderer.camera;
+const cam = new THREE.Object3D(); // seat-0 pose; copied onto the active view camera every frame
+cam.rotation.order = 'YXZ';
 
 // ------------------------------------------------------------------ build the sample island
 function rnd(seed) { let s = seed; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
@@ -184,7 +187,7 @@ addEventListener('mouseup', (e) => { if (e.button === 0) { mouseDown = false; br
 addEventListener('contextmenu', (e) => e.preventDefault());
 const dirv = new THREE.Vector3();
 function ray() {
-  cam.getWorldDirection(dirv);
+  cam.updateMatrixWorld(); cam.getWorldDirection(dirv);
   return world.raycast(cam.position, dirv, 7);
 }
 
@@ -200,7 +203,7 @@ $('uw').addEventListener('click', () => { uw = !uw; renderer.setUnderwater(uw); 
 $('home').addEventListener('click', home);
 let fxT = 0;
 $('fx').addEventListener('click', () => {
-  const p = new THREE.Vector3(); cam.getWorldDirection(dirv); p.copy(cam.position).addScaledVector(dirv, 3);
+  const p = new THREE.Vector3(); cam.updateMatrixWorld(); cam.getWorldDirection(dirv); p.copy(cam.position).addScaledVector(dirv, 3);
   for (const k of ['smoke', 'flame', 'hearts', 'crit', 'sparkle', 'poof']) {
     const a = ['smoke', 'flame', 'hearts', 'crit', 'sparkle', 'poof'].indexOf(k);
     renderer.spawnParticles(k, p.x + (a - 2.5) * 0.8, p.y, p.z);
@@ -238,6 +241,66 @@ for (const k of ALL_ITEM_KEYS) {
   strip.appendChild(img);
 }
 
+// ------------------------------------------------------------------ split screen + input harness
+let platformKey = 'computer';
+let hub = new InputHub({ platform: PLATFORMS.computer, canvas: renderer.renderer.domElement, container: $('view'), settings: { sens: 1 } });
+const seats = [0, 1, 2, 3].map((i) => ({ i, view: null, avatar: null, src: null, pos: new THREE.Vector3(), yaw: 0, pitch: 0, t: i * 1.7, walking: false }));
+let nViews = 1;
+function setViewCount(n) {
+  nViews = n;
+  for (const s of seats) if (s.i >= n && s.view) { s.avatar?.dispose(); s.avatar = null; s.view.dispose(); s.view = null; }
+  if (n === 1 && !seats[0].src) { for (const s of seats) { s.avatar?.dispose(); s.avatar = null; s.view?.dispose(); s.view = null; } renderer.setViews([]); renderer.setPlatform(platformKey); return; }
+  for (let i = 0; i < n; i++) {
+    const s = seats[i];
+    if (!s.view) { s.view = renderer.createView(i); s.view.setHeldItem(['diamond_pickaxe', 'iron_sword', 'torch', 'bread'][i]); }
+    if (!s.avatar) s.avatar = renderer.createPlayerAvatar(i);
+    s.avatar.setVisible(true);
+    if (i > 0) { s.pos.set(Math.cos(s.t) * (5 + i), 2.6, Math.sin(s.t) * (5 + i)); }
+  }
+  renderer.setPlatform(platformKey);
+  renderer.setViews(seats.slice(0, n).map((s) => s.view));
+}
+$('views').addEventListener('change', (e) => setViewCount(+e.target.value));
+$('platform').addEventListener('change', (e) => {
+  platformKey = e.target.value;
+  hub.dispose();
+  hub = new InputHub({ platform: PLATFORMS[platformKey], canvas: renderer.renderer.domElement, container: $('view'), settings: { sens: 1 } });
+  renderer.setPlatform(platformKey); renderer.setSafeArea(PLATFORMS[platformKey].safeArea);
+  for (const s of seats) s.src = null;
+  if (hub.touch) $('hint').textContent = 'iPad mode: left thumb = move, drag = look, buttons bottom-right';
+});
+function seatFly(s, dt) {
+  const src = s.src; const m = src.move(), l = src.look();
+  s.yaw += l.dyaw; s.pitch = Math.max(-1.5, Math.min(1.5, s.pitch + l.dpitch));
+  const sp = (m.sprint ? 12 : 6) * dt;
+  s.pos.x += (-Math.sin(s.yaw) * m.f + Math.cos(s.yaw) * m.r) * sp;
+  s.pos.z += (-Math.cos(s.yaw) * m.f - Math.sin(s.yaw) * m.r) * sp;
+  s.pos.y += ((m.jump ? 1 : 0) - (m.sneak ? 1 : 0)) * sp;
+  s.walking = Math.hypot(m.f, m.r) > 0.1;
+  for (const a of ['primary', 'secondary', 'jump', 'inventory', 'pause', 'drop', 'goals', 'hotbarNext', 'hotbarPrev']) if (src.pressed(a)) { s.last = a; if (a === 'primary') s.view?.swingHand(); }
+}
+function updateSeats(dt) {
+  hub.poll(dt);
+  for (const p of hub.unassignedJoinPresses()) {
+    const free = seats.find((s) => !s.src && (s.i > 0 || hub.gamepads.length));
+    if (free) { free.src = p; hub.assign(p, free.i); if (nViews < free.i + 1) { $('views').value = free.i + 1; setViewCount(free.i + 1); } }
+  }
+  if (hub.touch && !seats[0].src) seats[0].src = hub.touch;
+  const info = [];
+  for (const s of seats) if (s.src) info.push(`P${s.i + 1}:${s.src.kind}`);
+  $('pads').textContent = `${hub.gamepads.length} pad(s) · ${info.join(' ') || 'no seats'} · ${hub.gamepads[0] ? hub.gamepads[0].glyph('primary') : ''}`;
+  if (nViews < 2 && !(seats[0].src)) return;
+  for (const s of seats) {
+    if (s.i >= nViews || !s.view) continue;
+    if (s.i === 0 && !s.src) { s.pos.copy(cam.position); s.yaw = yaw; s.pitch = pitch; s.walking = keys.has('KeyW'); }
+    else if (s.src) { if (s.i === 0 && !s.fresh) { s.pos.copy(cam.position); s.yaw = yaw; s.pitch = pitch; s.fresh = true; } seatFly(s, dt); if (s.i === 0) { cam.position.copy(s.pos); yaw = s.yaw; pitch = s.pitch; } }
+    else { s.t += dt * 0.25; s.pos.set(Math.cos(s.t) * (5 + s.i), 2.6 + Math.sin(s.t * 2) * 0.3, Math.sin(s.t) * (5 + s.i)); s.yaw = -s.t - Math.PI / 2 + Math.PI; s.pitch = -0.1; s.walking = true; }
+    const v = s.view;
+    v.camera.position.copy(s.pos); v.camera.rotation.set(s.pitch, s.yaw, 0, 'YXZ');
+    s.avatar.update(dt, { x: s.pos.x, y: s.pos.y - 1.62, z: s.pos.z, yaw: s.yaw, pitch: s.pitch, moving: s.walking, sneaking: false, swinging: false, heldItemKey: ['diamond_pickaxe', 'iron_sword', 'torch', 'bread'][s.i], hurt: false, dead: false });
+  }
+}
+
 // ------------------------------------------------------------------ main loop
 let last = performance.now(), frames = 0, acc = 0, fpsMin = 999;
 const move = new THREE.Vector3();
@@ -248,6 +311,7 @@ function frame(now) {
 
   // fly
   cam.rotation.set(pitch, yaw, 0, 'YXZ');
+  if (nViews < 2 && !hub.touch && !seats[0].src) { const vc = renderer.views[0].camera; vc.position.copy(cam.position); vc.rotation.copy(cam.rotation); }
   const fast = keys.has('ControlLeft') || keys.has('ControlRight') ? 3 : 1;
   const v = 7 * speedMul * fast * dt;
   move.set(0, 0, 0);
@@ -262,6 +326,8 @@ function frame(now) {
   if (keys.has('Space')) cam.position.y += v;
   if (keys.has('ShiftLeft') || keys.has('ShiftRight')) cam.position.y -= v;
 
+  updateSeats(dt);
+  if (nViews < 2 && (hub.touch || seats[0].src)) { const vc = renderer.views[0].camera; vc.position.copy(cam.position); vc.rotation.set(pitch, yaw, 0, 'YXZ'); }
   // time
   if ($('play').checked) {
     tSlider.value = ((+tSlider.value + dt / 40) % 1).toFixed(4);
@@ -298,4 +364,4 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-window.__demo = { world, renderer, THREE, setView(x, y, z, yw, pt) { cam.position.set(x, y, z); yaw = yw; pitch = pt; }, home };
+window.__demo = { world, renderer, THREE, seats, updateSeats, get hub() { return hub; }, setViewCount, get cam() { return cam; }, setView(x, y, z, yw, pt) { cam.position.set(x, y, z); yaw = yw; pitch = pt; }, home };

@@ -12,7 +12,8 @@ export function countSurface(world) {
 }
 
 /** Candidate cells within 4 blocks of the One Block, >= 1.5 from the player, never in the player's column. */
-export function phaseSpawnSpots(world, player, waterId) {
+export function phaseSpawnSpots(world, players, waterId) {
+  const ps = Array.isArray(players) ? players : [players];
   const spots = [];
   for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) {
     const y = world.topSolidY(dx, dz);
@@ -20,8 +21,7 @@ export function phaseSpawnSpots(world, player, waterId) {
     if (world.isSolid(dx, y + 1, dz) || world.isSolid(dx, y + 2, dz)) continue;
     if (world.getBlock(dx, y + 1, dz) === waterId) continue;
     const cx = dx + 0.5, cz = dz + 0.5;
-    if (Math.hypot(cx - player.x, cz - player.z) < 1.5) continue;
-    if (Math.floor(player.x) === dx && Math.floor(player.z) === dz) continue;
+    if (ps.some((p) => Math.hypot(cx - p.x, cz - p.z) < 1.5 || (Math.floor(p.x) === dx && Math.floor(p.z) === dz))) continue;
     spots.push({ x: cx, y: y + 1, z: cz });
   }
   return spots;

@@ -36,21 +36,24 @@ export class MobManager {
   }
 
   update(dt) {
-    const g = this.g, p = g.player;
+    const g = this.g;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const m = this.list[i];
       m.update(dt);
-      if (!m.remove && m.age > 300 && m.dist2(p.x, p.y, p.z) > 32 * 32) m.remove = true;
+      if (!m.remove && m.age > 300 && !g.nearestSeat(m.x, m.y, m.z, 32)) m.remove = true;
       if (m.remove) { m.dispose(); this.list.splice(i, 1); }
     }
     this.spawnT -= dt; this.zombieT -= dt;
-    if (this.spawnT <= 0 && !p.dead) { this.spawnT = 2.5; this.trySpawn('sheep'); }
-    if (this.zombieT <= 0 && !p.dead) { this.zombieT = 8; this.trySpawn('zombie'); }
+    const anyLiving = g.seats.some((s) => !s.player.dead);
+    if (this.spawnT <= 0 && anyLiving) { this.spawnT = 2.5; this.trySpawn('sheep'); }
+    if (this.zombieT <= 0 && anyLiving) { this.zombieT = 8; this.trySpawn('zombie'); }
   }
 
   trySpawn(which) {
-    const g = this.g, w = g.world, p = g.player;
-    if (this.list.length >= 14) return;
+    const g = this.g, w = g.world;
+    const living = g.seats.filter((s) => !s.player.dead);
+    if (!living.length || this.list.length >= 14) return;
+    const p = living[Math.floor(Math.random() * living.length)].player; // spawn around a random living player
     const night = g.isNight();
     let kind = null;
     if (which === 'zombie') { if (night && this.count('zombie') < zombieCap(g.surfaceCount())) kind = 'zombie'; }

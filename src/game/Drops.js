@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { moveEntity } from './physics.js';
 import { maxStack, maxDurability } from './Inventory.js';
+import { pickupSeat, nearestSeat } from './team.js';
 import { ITEMS } from '../data/items.js';
 
 const MAX_DROPS = 140;
@@ -35,22 +36,22 @@ export class Drops {
   }
 
   update(dt) {
-    const g = this.game, p = g.player, w = g.world;
+    const g = this.game, w = g.world;
     this.mergeT += dt;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const d = this.list[i];
       d.age += dt; d.delay -= dt;
       let remove = d.age > 300 || d.y < -40;
       if (!remove) {
-        const dx = p.x - d.x, dy = p.y + 0.9 - (d.y + 0.1), dz = p.z - d.z;
-        const dist = Math.hypot(dx, dy, dz);
-        if (!p.dead && d.delay <= 0 && dist < 1.2 && !g.inv.canAdd(d.key, 1)) g.inventoryFullHint();
-        if (!p.dead && d.delay <= 0 && dist < 1.5 && g.inv.canAdd(d.key, 1)) {
-          // magnetise
+        const seat = d.delay <= 0 ? pickupSeat(g.seats, d, 1.5) : null; // nearest living seat with room
+        if (d.delay <= 0 && !seat) { const near = nearestSeat(g.seats, d.x, d.y, d.z, 1.2); if (near && !near.inv.canAdd(d.key, 1)) g.inventoryFullHint(near); }
+        if (seat) {
+          const p = seat.player;
+          const dx = p.x - d.x, dy = p.y + 0.9 - (d.y + 0.1), dz = p.z - d.z, dist = Math.hypot(dx, dy, dz) || 0.01;
           d.vx = dx / dist * 8; d.vy = dy / dist * 8; d.vz = dz / dist * 8;
           d.magnet = true;
           if (dist < 0.55) {
-            const left = g.inv.add(d.key, d.n, d.dur);
+            const left = seat.inv.add(d.key, d.n, d.dur);
             const got = d.n - left;
             if (got > 0) { g.sound.play('pop', { pitch: 0.9 + Math.random() * 0.4, minGap: 40 }); g.events.emit('pickup', d.key); g.ui.dirtyInv(); }
             d.n = left;

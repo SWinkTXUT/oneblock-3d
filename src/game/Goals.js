@@ -48,11 +48,12 @@ export class Goals {
   /** inventory/state polling for "obtain"-style goals. */
   poll(dt) {
     this.pollT += dt; if (this.pollT < 0.5) return; this.pollT = 0;
-    const g = this.game, inv = g.inv;
-    if (!this.done.wood && (inv.count('oak_log') || inv.count('spruce_log'))) this.award('wood');
-    if (!this.done.iron && inv.count('iron_ingot')) this.award('iron');
-    if (!this.done.diamond && inv.count('diamond')) this.award('diamond');
-    if (!this.done.armor && inv.armor.some(Boolean)) this.award('armor');
+    const g = this.game;
+    const has = (k) => g.seats.some((s) => s.inv.count(k) > 0);
+    if (!this.done.wood && (has('oak_log') || has('spruce_log'))) this.award('wood');
+    if (!this.done.iron && has('iron_ingot')) this.award('iron');
+    if (!this.done.diamond && has('diamond')) this.award('diamond');
+    if (!this.done.armor && g.seats.some((s) => s.inv.armor.some(Boolean))) this.award('armor');
     if (!this.done.phase4 && (g.state.blocksBroken >= 400 || g.cycle > 1)) this.award('phase4');
     if (!this.done.cycle && g.cycle > 1) this.award('cycle');
   }
