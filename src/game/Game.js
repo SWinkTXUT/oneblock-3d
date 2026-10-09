@@ -133,7 +133,7 @@ export class Game {
     if (seat.avatar) seat.avatar.setVisible(this.mode === 'play');
     if (!seat.hasData || this.mode === 'play') {
       const keep = seat.hasData ? { hp: seat.player.health, hu: seat.player.hunger, sat: seat.player.saturation } : null;
-      const sp = seat.spawnPoint(); seat.player.reset(sp.x, sp.y, sp.z); if (!seat.hasData) seat.player.pitch = -1.30;
+      const sp = seat.spawnPoint(); seat.player.reset(sp.x, sp.y, sp.z); seat.player.pitch = -1.30; // every (re)spawn looks down at the One Block
       if (keep && keep.hp > 0) { seat.player.health = keep.hp; seat.player.hunger = keep.hu; seat.player.saturation = keep.sat; } // leaving and rejoining does not heal
     }
     seat.hasData = true;
@@ -374,7 +374,7 @@ export class Game {
     this.slots.forEach((s, i) => {
       const sd = (d.seats || [])[i];
       s.inv.clear(); s.spawn = null; s.inBed = null; s.lastGood = null; s.tut = { sneakShown: !!sd, sneakT: 0, t: 0 };
-      if (sd) { s.deserialize(sd); s.hasData = true; } else { const sp = this.worldSpawn(i); s.player.reset(sp.x, sp.y, sp.z); s.hasData = s.active; }
+      if (sd) { s.deserialize(sd); s.hasData = true; } else { const sp = this.worldSpawn(i); s.player.reset(sp.x, sp.y, sp.z); s.player.pitch = -1.30; s.hasData = s.active; }
       s.player.dead = false;
     });
     this.drops.restore(d.drops);
@@ -641,7 +641,7 @@ export class Game {
     w.setBlock(x, y, z, toWater ? this.WATER : 0);
     this.renderer.spawnBlockParticles(x, y, z, id);
     this.sound.play('break_' + materialOf(def.key), { vol: 1 });
-    for (const d of drops) this.dropItem(d.key, d.n, x + 0.5, y + 0.5, z + 0.5, d.dur);
+    for (const d of drops) { const e = this.dropItem(d.key, d.n, x + 0.5, y + 0.5, z + 0.5, d.dur); if (e && seat) e.owner = seat.index; }
     if (seat) {
       if (held && ITEMS[held.key].tool && def.hardness > 0) seat.damageHeld(1);
       seat.player.addExhaustion(0.04);

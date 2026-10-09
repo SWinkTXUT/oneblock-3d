@@ -31,6 +31,14 @@ export function pickupSeat(seats, d, reach = 1.5) {
     const p = s.player, dx = p.x - d.x, dy = p.y + 0.9 - (d.y + 0.1), dz = p.z - d.z, dist2 = dx * dx + dy * dy + dz * dz;
     if (dist2 <= bd && s.inv.canAdd(d.key, 1)) { bd = dist2; best = s; }
   }
+  // the player who broke the block gets first claim for a moment (all seats share the one-block spawn, so "nearest" ties)
+  if (best && d.owner != null && d.age < 1.5 && best.index !== d.owner) {
+    const o = seats.find((s) => s.index === d.owner);
+    if (o && isLiving(o) && !o.disconnected && o.inv.canAdd(d.key, 1)) {
+      const p = o.player, dx = p.x - d.x, dy = p.y + 0.9 - (d.y + 0.1), dz = p.z - d.z;
+      return dx * dx + dy * dy + dz * dz <= reach * reach ? o : null; // owner in reach takes it; otherwise wait out the claim
+    }
+  }
   return best;
 }
 

@@ -15,7 +15,7 @@ import { keyToChunk } from '../world/World.js';
 import { Sky, computeSky, createSkyState } from './sky.js';
 import { Particles } from './particles.js';
 import { buildItemObject } from './itemMesh.js';
-import { View } from './View.js';
+import { View, LAYER_AVATAR } from './View.js';
 import { Avatar } from './Avatar.js';
 import { qualityBudget, viewportRects } from '../platform.js';
 
@@ -689,9 +689,21 @@ export class Renderer {
       v.lineMat.resolution.set(pw, ph);
       this.oneBlockLineMat.resolution.set(pw, ph);
       this.particles.setScale(ph / (2 * Math.tan(THREE.MathUtils.degToRad(v.camera.fov) / 2)));
+      // Players share the one-block spawn, so another player's body can sit right on this camera and fill the view.
+      // Skip drawing any avatar within ~1 block of this camera for this view only.
+      const cam = v.camera.position, hid = [];
+      for (const a of this.avatars) {
+        if (a.seat === v.seatIndex || !a.root.visible) continue;
+        const p = a.root.position;
+        if (Math.hypot(p.x - cam.x, p.z - cam.z) < 1.1 && cam.y - p.y > -0.6 && cam.y - p.y < 2.6) {
+          const L = LAYER_AVATAR(a.seat);
+          if (v.camera.layers.isEnabled(L)) { v.camera.layers.disable(L); hid.push(L); }
+        }
+      }
       r.autoClear = true;
       r.render(this.scene, v.camera);
       r.autoClear = false;
+      for (const L of hid) v.camera.layers.enable(L);
       r.clearDepth();
       r.render(v.viewScene, v.viewCam);
     }
